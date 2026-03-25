@@ -1,0 +1,87 @@
+mod app;
+mod templates;
+mod theme;
+mod ui;
+
+use app::App;
+use crossterm::{
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use ratatui::prelude::*;
+use std::io;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Setup terminal
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    // Run app
+    let mut app = App::new().await?;
+    let result = run_app(&mut terminal, &mut app).await;
+
+    // Restore terminal
+    disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
+    terminal.show_cursor()?;
+
+    if let Err(e) = result {
+        eprintln!("Error: {e}");
+    }
+
+    Ok(())
+}
+
+async fn run_app<B: Backend>(
+    terminal: &mut Terminal<B>,
+    app: &mut App,
+) -> Result<(), Box<dyn std::error::Error>> {
+    loop {
+        terminal.draw(|f| ui::draw(f, app))?;
+
+        if event::poll(std::time::Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                // Ctrl+C or q to quit
+                if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL)
+                {
+                    return Ok(());
+                }
+
+                match app.mode {
+                    app::Mode::Normal => match key.code {
+                        KeyCode::Char('q') => return Ok(()),
+                        KeyCode::Tab | KeyCode::Char('l') | KeyCode::Right => app.next_tab(),
+                        KeyCode::BackTab | KeyCode::Char('h') | KeyCode::Left => app.prev_tab(),
+                        KeyCode::Char('j') | KeyCode::Down => app.next_item(),
+                        KeyCode::Char('k') | KeyCode::Up => app.prev_item(),
+                        KeyCode::Enter => app.select_item().await?,
+                        KeyCode::Char('s') => app.send_selected().await?,
+                        KeyCode::Char('p') => app.preview_selected(),
+                        KeyCode::Char('r') => app.refresh().await?,
+                        KeyCode::Esc => app.dismiss_message(),
+                        _ => {}
+                    },
+                    app::Mode::Preview => match key.code {
+                        KeyCode::Esc | KeyCode::Char('q') => app.mode = app::Mode::Normal,
+                        KeyCode::Char('j') | KeyCode::Down => app.scroll_down(),
+                        KeyCode::Char('k') | KeyCode::Up => app.scroll_up(),
+                        _ => {}
+                    },
+                    app::Mode::Sending => match key.code {
+                        KeyCode::Esc => app.mode = app::Mode::Normal,
+                        _ => {}
+                    },
+                }
+            }
+        }
+    }
+}

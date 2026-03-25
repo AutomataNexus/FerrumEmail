@@ -8,6 +8,7 @@ members = [
     "crates/ferrum-email-preview",
     "crates/ferrum-email-macros",
     "crates/ferrum-email-cli",
+    "crates/ferrum-email-tui",
     "examples/welcome",
     "examples/password-reset",
 ]
