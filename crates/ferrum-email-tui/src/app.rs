@@ -19,17 +19,19 @@ const VAULT_PASSPHRASE: &str = "ferrum-email-vault-key";
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Tab {
     Templates,
+    Compose,
     Preview,
     Vault,
     Send,
 }
 
 impl Tab {
-    pub const ALL: &'static [Tab] = &[Tab::Templates, Tab::Preview, Tab::Vault, Tab::Send];
+    pub const ALL: &'static [Tab] = &[Tab::Templates, Tab::Compose, Tab::Preview, Tab::Vault, Tab::Send];
 
     pub fn label(&self) -> &'static str {
         match self {
             Tab::Templates => " Templates ",
+            Tab::Compose => " Compose ",
             Tab::Preview => " Preview ",
             Tab::Vault => " Vault ",
             Tab::Send => " Send ",
@@ -42,6 +44,14 @@ pub enum Mode {
     Normal,
     Preview,
     Sending,
+    Compose,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ComposeField {
+    To,
+    Subject,
+    Body,
 }
 
 pub struct App {
@@ -53,6 +63,10 @@ pub struct App {
     pub preview_text: String,
     pub preview_scroll: u16,
     pub message: Option<(String, bool)>, // (text, is_error)
+    pub compose_to: String,
+    pub compose_subject: String,
+    pub compose_body: String,
+    pub compose_field: ComposeField,
     pub vault_keys: Vec<String>,
     pub vault_status: String,
     pub send_to: String,
@@ -118,6 +132,10 @@ impl App {
             preview_text,
             preview_scroll: 0,
             message: None,
+            compose_to: smtp_user.clone(),
+            compose_subject: String::new(),
+            compose_body: String::new(),
+            compose_field: ComposeField::To,
             vault_keys,
             vault_status,
             send_to: smtp_user.clone(),
@@ -258,4 +276,194 @@ impl App {
     pub fn scroll_up(&mut self) {
         self.preview_scroll = self.preview_scroll.saturating_sub(1);
     }
+
+    // ── Compose mode ──
+
+    pub fn enter_compose(&mut self) {
+        self.mode = Mode::Compose;
+        self.compose_field = ComposeField::To;
+    }
+
+    pub fn compose_next_field(&mut self) {
+        self.compose_field = match self.compose_field {
+            ComposeField::To => ComposeField::Subject,
+            ComposeField::Subject => ComposeField::Body,
+            ComposeField::Body => ComposeField::To,
+        };
+    }
+
+    pub fn compose_prev_field(&mut self) {
+        self.compose_field = match self.compose_field {
+            ComposeField::To => ComposeField::Body,
+            ComposeField::Subject => ComposeField::To,
+            ComposeField::Body => ComposeField::Subject,
+        };
+    }
+
+    pub fn compose_type_char(&mut self, ch: char) {
+        match self.compose_field {
+            ComposeField::To => self.compose_to.push(ch),
+            ComposeField::Subject => self.compose_subject.push(ch),
+            ComposeField::Body => self.compose_body.push(ch),
+        }
+    }
+
+    pub fn compose_backspace(&mut self) {
+        match self.compose_field {
+            ComposeField::To => { self.compose_to.pop(); }
+            ComposeField::Subject => { self.compose_subject.pop(); }
+            ComposeField::Body => { self.compose_body.pop(); }
+        }
+    }
+
+    pub fn compose_newline(&mut self) {
+        if self.compose_field == ComposeField::Body {
+            self.compose_body.push('\n');
+        }
+    }
+
+    pub async fn compose_send(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if self.compose_to.is_empty() || self.compose_subject.is_empty() {
+            self.message = Some(("To and Subject are required".to_string(), true));
+            return Ok(());
+        }
+
+        self.mode = Mode::Sending;
+
+        // Build a simple HTML email from the compose fields
+        let html_body = compose_to_html(&self.compose_subject, &self.compose_body);
+        let text_body = self.compose_body.clone();
+
+        let message = ferrum_email_send::EmailMessage {
+            from: self.from.clone(),
+            to: vec![self.compose_to.as_str().into()],
+            subject: self.compose_subject.clone(),
+            html: html_body,
+            text: Some(text_body),
+            ..Default::default()
+        };
+
+        let provider = SmtpProvider::builder()
+            .host(&self.smtp_host)
+            .port(self.smtp_port)
+            .credentials(&self.smtp_user, &self.smtp_pass)
+            .auth_login()
+            .build()?;
+
+        let sender = Sender::new(provider, self.from.clone());
+
+        match sender.send_message(message).await {
+            Ok(result) => {
+                let record = SendRecord {
+                    template: "Composed".to_string(),
+                    to: self.compose_to.clone(),
+                    message_id: result.message_id.clone(),
+                    timestamp: self.compose_subject.clone(),
+                    success: true,
+                };
+                self.send_history.push(record);
+                self.message = Some((
+                    format!("Sent to {} (ID: {})", self.compose_to, result.message_id),
+                    false,
+                ));
+                // Clear compose fields after success
+                self.compose_subject.clear();
+                self.compose_body.clear();
+            }
+            Err(e) => {
+                self.message = Some((format!("Send failed: {e}"), true));
+            }
+        }
+        self.mode = Mode::Normal;
+        Ok(())
+    }
+}
+
+/// Convert compose text to branded HTML email.
+fn compose_to_html(subject: &str, body: &str) -> String {
+    use ferrum_email_components::*;
+    use ferrum_email_core::Component;
+
+    const FERRUM_LOGO: &str =
+        "https://raw.githubusercontent.com/AutomataNexus/FerrumEmail/master/assets/FerrumEmail_logo.PNG";
+    const NEXUS_LOGO: &str =
+        "https://raw.githubusercontent.com/AutomataNexus/FerrumEmail/master/assets/AutomataNexus_Logo.PNG";
+
+    let body_paragraphs: Vec<Node> = body
+        .split('\n')
+        .filter(|l| !l.is_empty())
+        .map(|line| {
+            Text::new(line)
+                .color(Color::hex("4A4540"))
+                .font_size(Px(15))
+                .line_height(1.6)
+                .into_node()
+        })
+        .collect();
+
+    let mut section = Section::new()
+        .padding(Spacing::new(Px(0), Px(40), Px(32), Px(40)))
+        .background(Color::hex("FFFEFA"))
+        .child_node(
+            Heading::h2(subject)
+                .color(Color::hex("2D2A26"))
+                .margin(Spacing::new(Px(0), Px(0), Px(16), Px(0)))
+                .into_node(),
+        );
+
+    for p in body_paragraphs {
+        section = section.child_node(p);
+    }
+
+    let footer = Section::new()
+        .padding(Spacing::new(Px(28), Px(40), Px(32), Px(40)))
+        .background(Color::hex("FAF8F5"))
+        .text_align(TextAlign::Center)
+        .child_node(Image::new(NEXUS_LOGO, "AutomataNexus", Px(140)).into_node())
+        .child_node(Spacer::new(Px(14)).into_node())
+        .child_node(
+            Text::new("Secured by NexusVault")
+                .color(Color::hex("8B6F5E"))
+                .font_size(Px(13))
+                .font_weight(FontWeight::SemiBold)
+                .text_align(TextAlign::Center)
+                .margin(Spacing::new(Px(0), Px(0), Px(4), Px(0)))
+                .into_node(),
+        )
+        .child_node(Hr::new().color(Color::hex("E8DDD4")).into_node())
+        .child_node(Spacer::new(Px(12)).into_node())
+        .child_node(
+            Text::new("\u{00A9} 2026 AutomataNexus LLC. All rights reserved.")
+                .color(Color::hex("A8998C"))
+                .font_size(Px(11))
+                .text_align(TextAlign::Center)
+                .into_node(),
+        );
+
+    let email = Html::new()
+        .child(Head::new().title(subject))
+        .child(
+            Body::new()
+                .background(Color::hex("FAFAF8"))
+                .child(
+                    Container::new()
+                        .max_width(Px(600))
+                        .padding(Spacing::xy(Px(20), Px(0)))
+                        .child_node(
+                            Section::new()
+                                .padding(Spacing::new(Px(40), Px(40), Px(20), Px(40)))
+                                .background(Color::hex("FFFEFA"))
+                                .text_align(TextAlign::Center)
+                                .child_node(
+                                    Image::new(FERRUM_LOGO, "Ferrum Email", Px(280)).into_node(),
+                                )
+                                .into_node(),
+                        )
+                        .child_node(section.into_node())
+                        .child_node(footer.into_node()),
+                ),
+        );
+
+    let renderer = ferrum_email_render::Renderer::default();
+    renderer.render_html(&email).unwrap_or_default()
 }

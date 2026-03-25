@@ -41,6 +41,9 @@ pub mod sender;
 #[cfg(feature = "vault")]
 pub mod vault;
 
+#[cfg(feature = "shield")]
+pub mod shield;
+
 pub use error::EmailError;
 pub use message::{Attachment, EmailMessage, EmailTag, Mailbox, SendResult};
 pub use provider::EmailProvider;

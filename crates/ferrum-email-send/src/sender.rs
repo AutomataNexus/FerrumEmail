@@ -74,11 +74,19 @@ impl Sender {
             ..Default::default()
         };
 
+        // NexusShield validation before sending
+        #[cfg(feature = "shield")]
+        crate::shield::validate_outbound(&message)?;
+
         self.provider.send(message).await
     }
 
     /// Send a pre-built EmailMessage directly via the provider.
     pub async fn send_message(&self, message: EmailMessage) -> Result<SendResult, EmailError> {
+        // NexusShield validation before sending
+        #[cfg(feature = "shield")]
+        crate::shield::validate_outbound(&message)?;
+
         self.provider.send(message).await
     }
 

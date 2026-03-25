@@ -8,7 +8,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{App, Mode, Tab};
+use crate::app::{App, ComposeField, Mode, Tab};
 use crate::templates::TEMPLATES;
 use crate::theme;
 
@@ -80,8 +80,10 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
 fn draw_main(f: &mut Frame, app: &App, area: Rect) {
     match app.mode {
         Mode::Preview => draw_preview(f, app, area),
+        Mode::Compose => draw_compose(f, app, area),
         _ => match app.tab {
             Tab::Templates => draw_templates(f, app, area),
+            Tab::Compose => draw_compose(f, app, area),
             Tab::Preview => draw_preview(f, app, area),
             Tab::Vault => draw_vault(f, app, area),
             Tab::Send => draw_send_history(f, app, area),
@@ -214,6 +216,105 @@ fn draw_preview(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(text_view, chunks[1]);
 }
 
+fn draw_compose(f: &mut Frame, app: &App, area: Rect) {
+    let is_editing = app.mode == Mode::Compose;
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),  // To
+            Constraint::Length(3),  // Subject
+            Constraint::Min(8),    // Body
+            Constraint::Length(3), // Help
+        ])
+        .split(area);
+
+    let cursor_style = Style::default().fg(theme::TERRACOTTA).add_modifier(Modifier::BOLD);
+    let field_style = |field: ComposeField| {
+        if is_editing && app.compose_field == field {
+            Style::default().fg(theme::TERRACOTTA)
+        } else {
+            theme::border_style()
+        }
+    };
+
+    // To field
+    let to_block = Block::default()
+        .title(Span::styled(" To ", if is_editing && app.compose_field == ComposeField::To { cursor_style } else { theme::label() }))
+        .borders(Borders::ALL)
+        .border_style(field_style(ComposeField::To))
+        .style(Style::default().bg(theme::CARD_BG));
+    let to_text = Paragraph::new(Line::from(Span::styled(
+        format!(" {}", &app.compose_to),
+        theme::text_normal(),
+    )))
+    .block(to_block);
+    f.render_widget(to_text, chunks[0]);
+
+    // Subject field
+    let subj_block = Block::default()
+        .title(Span::styled(" Subject ", if is_editing && app.compose_field == ComposeField::Subject { cursor_style } else { theme::label() }))
+        .borders(Borders::ALL)
+        .border_style(field_style(ComposeField::Subject))
+        .style(Style::default().bg(theme::CARD_BG));
+    let subj_text = Paragraph::new(Line::from(Span::styled(
+        format!(" {}", &app.compose_subject),
+        theme::text_normal(),
+    )))
+    .block(subj_block);
+    f.render_widget(subj_text, chunks[1]);
+
+    // Body field
+    let body_block = Block::default()
+        .title(Span::styled(" Body ", if is_editing && app.compose_field == ComposeField::Body { cursor_style } else { theme::label() }))
+        .borders(Borders::ALL)
+        .border_style(field_style(ComposeField::Body))
+        .style(Style::default().bg(theme::CARD_BG));
+    let body_lines: Vec<Line> = app
+        .compose_body
+        .lines()
+        .map(|l| Line::from(Span::styled(format!(" {l}"), theme::text_normal())))
+        .collect();
+    let body_content = if body_lines.is_empty() {
+        vec![Line::from(Span::styled(
+            "  Type your message here...",
+            theme::text_dim(),
+        ))]
+    } else {
+        body_lines
+    };
+    let body_text = Paragraph::new(body_content)
+        .wrap(Wrap { trim: false })
+        .block(body_block);
+    f.render_widget(body_text, chunks[2]);
+
+    // Help bar
+    let help = if is_editing {
+        Paragraph::new(Line::from(vec![
+            Span::styled("  [Tab]", theme::keybind()),
+            Span::styled(" Next field  ", theme::keybind_desc()),
+            Span::styled("[Ctrl+S]", theme::keybind()),
+            Span::styled(" Send  ", theme::keybind_desc()),
+            Span::styled("[Esc]", theme::keybind()),
+            Span::styled(" Cancel  ", theme::keybind_desc()),
+            Span::styled("[Enter]", theme::keybind()),
+            Span::styled(" New line (body)", theme::keybind_desc()),
+        ]))
+    } else {
+        Paragraph::new(Line::from(vec![
+            Span::styled("  [Enter]", theme::keybind()),
+            Span::styled(" Start composing  ", theme::keybind_desc()),
+        ]))
+    };
+    let help = help.block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(theme::border_style())
+            .style(Style::default().bg(theme::SUBTLE_BG)),
+    );
+    f.render_widget(help, chunks[3]);
+}
+
 fn draw_vault(f: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -338,6 +439,7 @@ fn draw_statusbar(f: &mut Frame, app: &App, area: Rect) {
         let mode_label = match app.mode {
             Mode::Normal => "NORMAL",
             Mode::Preview => "PREVIEW",
+            Mode::Compose => "COMPOSE",
             Mode::Sending => "SENDING...",
         };
         Line::from(vec![
