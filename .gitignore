@@ -10,3 +10,9 @@
 PRD.md
 PROGRESS.md
 ARCHITECTURE.md
+
+# Local dev config (path overrides for unpublished crates)
+.cargo/config.toml
+
+# Local tools (contain vault-seeded credentials)
+tools/

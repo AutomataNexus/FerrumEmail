@@ -11,6 +11,9 @@ members = [
     "examples/welcome",
     "examples/password-reset",
 ]
+exclude = [
+    "tools/*",
+]
 
 [workspace.package]
 version = "0.1.0"
