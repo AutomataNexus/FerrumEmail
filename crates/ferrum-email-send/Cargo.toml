@@ -8,9 +8,10 @@ repository.workspace = true
 description = "Email provider abstraction and sending API for Ferrum Email"
 
 [features]
-default = ["smtp"]
+default = ["smtp", "shield"]
 smtp = ["rustls", "tokio-rustls", "webpki-roots", "base64"]
 vault = ["dep:aegis-db-vault"]
+shield = ["dep:nexus-shield"]
 
 [dependencies]
 ferrum-email-core.workspace = true
@@ -24,6 +25,7 @@ webpki-roots = { version = "0.26", optional = true }
 base64 = { version = "0.22", optional = true }
 
 aegis-db-vault = { version = "0.2.3", optional = true }
+nexus-shield = { version = "0.3", optional = true }
 
 [dev-dependencies]
 ferrum-email-components.workspace = true
