@@ -4,5 +4,9 @@
 //! emails through a specific service or protocol.
 
 pub mod console;
+#[cfg(feature = "smtp")]
+pub mod smtp;
 
 pub use console::ConsoleProvider;
+#[cfg(feature = "smtp")]
+pub use smtp::SmtpProvider;
