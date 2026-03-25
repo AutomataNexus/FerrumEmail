@@ -17,15 +17,9 @@ use crate::provider::EmailProvider;
 #[derive(Debug, Clone)]
 pub enum SmtpAuth {
     /// AUTH PLAIN (username + password in one base64 blob).
-    Plain {
-        username: String,
-        password: String,
-    },
+    Plain { username: String, password: String },
     /// AUTH LOGIN (username and password sent separately).
-    Login {
-        username: String,
-        password: String,
-    },
+    Login { username: String, password: String },
 }
 
 /// Native SMTP email provider.
@@ -114,8 +108,7 @@ impl SmtpProvider {
                     "Content-Disposition: attachment; filename=\"{}\"\r\n\r\n",
                     att.filename
                 ));
-                let encoded =
-                    base64::engine::general_purpose::STANDARD.encode(&att.content);
+                let encoded = base64::engine::general_purpose::STANDARD.encode(&att.content);
                 // Wrap base64 at 76 chars per RFC 2045
                 for chunk in encoded.as_bytes().chunks(76) {
                     mime.push_str(std::str::from_utf8(chunk).unwrap_or(""));
@@ -289,9 +282,7 @@ impl EmailProvider for SmtpProvider {
         send_command(&mut tls_writer, "DATA\r\n").await?;
         let data_resp = read_response(&mut tls_reader).await?;
         if !data_resp.starts_with('3') {
-            return Err(EmailError::Provider(format!(
-                "DATA rejected: {data_resp}"
-            )));
+            return Err(EmailError::Provider(format!("DATA rejected: {data_resp}")));
         }
 
         // Send MIME message body
@@ -311,8 +302,8 @@ impl EmailProvider for SmtpProvider {
         }
 
         // Extract message ID from response if available
-        let message_id = extract_message_id(&msg_resp)
-            .unwrap_or_else(|| format!("smtp-{:016x}", rand_u64()));
+        let message_id =
+            extract_message_id(&msg_resp).unwrap_or_else(|| format!("smtp-{:016x}", rand_u64()));
 
         // QUIT
         let _ = send_command(&mut tls_writer, "QUIT\r\n").await;
