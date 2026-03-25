@@ -1,0 +1,17 @@
+[package]
+name = "ferrum-email-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "CLI tool for Ferrum Email — preview, render, validate, and send emails"
+
+[[bin]]
+name = "ferrum"
+path = "src/main.rs"
+
+[dependencies]
+ferrum-email-core.workspace = true
+ferrum-email-render.workspace = true
+ferrum-email-send.workspace = true

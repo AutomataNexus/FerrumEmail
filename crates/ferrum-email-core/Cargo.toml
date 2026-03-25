@@ -1,0 +1,10 @@
+[package]
+name = "ferrum-email-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Core types, traits, and node tree for the Ferrum Email framework"
+
+[dependencies]

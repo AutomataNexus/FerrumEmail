@@ -1,0 +1,11 @@
+[package]
+name = "ferrum-email-render"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Rendering engine for Ferrum Email — Node tree to HTML, plain text, and CSS inlining"
+
+[dependencies]
+ferrum-email-core.workspace = true

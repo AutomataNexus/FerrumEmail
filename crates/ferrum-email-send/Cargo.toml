@@ -1,0 +1,24 @@
+[package]
+name = "ferrum-email-send"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Email provider abstraction and sending API for Ferrum Email"
+
+[features]
+default = []
+vault = ["aegis-vault"]
+
+[dependencies]
+ferrum-email-core.workspace = true
+ferrum-email-render.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+thiserror.workspace = true
+# Local path used for development; will switch to crates.io version once aegis-vault is published
+aegis-vault = { version = "0.2.2", path = "/opt/Aegis-DB/crates/aegis-vault", optional = true }
+
+[dev-dependencies]
+ferrum-email-components.workspace = true
