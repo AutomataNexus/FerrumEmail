@@ -47,10 +47,7 @@ pub trait EmailProvider: Send + Sync {
     ///
     /// The default implementation sends each message sequentially.
     /// Providers may override this for bulk-send APIs.
-    async fn send_batch(
-        &self,
-        messages: Vec<EmailMessage>,
-    ) -> Result<Vec<SendResult>, EmailError> {
+    async fn send_batch(&self, messages: Vec<EmailMessage>) -> Result<Vec<SendResult>, EmailError> {
         let mut results = Vec::with_capacity(messages.len());
         for message in messages {
             results.push(self.send(message).await?);

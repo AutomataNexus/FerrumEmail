@@ -200,8 +200,7 @@ fn heading_levels_produce_correct_tags() {
 
 #[test]
 fn image_renders_with_required_attributes() {
-    let img = Image::new("https://example.com/logo.png", "Logo", Px(200))
-        .height(Px(50));
+    let img = Image::new("https://example.com/logo.png", "Logo", Px(200)).height(Px(50));
     let renderer = Renderer::default();
     let html = renderer.render_node(&img.render());
 
@@ -223,8 +222,7 @@ fn hr_renders_as_self_closing() {
 
 #[test]
 fn link_renders_with_href() {
-    let link = Link::new("https://example.com", "Example")
-        .color(Color::hex("067df7"));
+    let link = Link::new("https://example.com", "Example").color(Color::hex("067df7"));
     let renderer = Renderer::default();
     let html = renderer.render_node(&link.render());
 
@@ -325,10 +323,7 @@ async fn send_via_console_provider() {
 
 #[tokio::test]
 async fn send_batch_via_console_provider() {
-    let sender = Sender::new(
-        ConsoleProvider::new(),
-        "test@example.com",
-    );
+    let sender = Sender::new(ConsoleProvider::new(), "test@example.com");
 
     let email = SimpleEmail;
     let recipients = vec![
@@ -397,9 +392,7 @@ fn pretty_print_renderer() {
         indent: "  ".to_string(),
     };
     let renderer = Renderer::with_config(config);
-    let html = renderer
-        .render_html(&SimpleEmail)
-        .unwrap();
+    let html = renderer.render_html(&SimpleEmail).unwrap();
 
     // Pretty-printed HTML should have newlines and indentation
     assert!(html.contains('\n'));

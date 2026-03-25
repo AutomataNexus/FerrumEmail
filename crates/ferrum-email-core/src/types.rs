@@ -146,7 +146,10 @@ impl fmt::Display for FontFamily {
             }
             FontFamily::Serif => write!(f, "Georgia, 'Times New Roman', Times, serif"),
             FontFamily::Monospace => {
-                write!(f, "'SFMono-Regular', Menlo, Consolas, 'Courier New', monospace")
+                write!(
+                    f,
+                    "'SFMono-Regular', Menlo, Consolas, 'Courier New', monospace"
+                )
             }
         }
     }

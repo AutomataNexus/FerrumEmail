@@ -62,11 +62,9 @@ impl Component for Row {
                     s.width = Some(SizeValue::Percent(Percent(100.0)));
                     s
                 })
-                .child(Node::Element(
-                    Element::new(Tag::Tbody).child(Node::Element(
-                        Element::new(Tag::Tr).children(self.children.clone()),
-                    )),
-                )),
+                .child(Node::Element(Element::new(Tag::Tbody).child(
+                    Node::Element(Element::new(Tag::Tr).children(self.children.clone())),
+                ))),
         )
     }
 }

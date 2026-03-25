@@ -74,6 +74,30 @@ impl EmailProvider for MyProvider {
 | AWS SES | `provider-ses` | Phase 3 |
 | Mailgun | `provider-mailgun` | Phase 3 |
 
+## Vault Integration (NexusVault)
+
+Enable the `vault` feature to store email credentials encrypted at rest:
+
+```toml
+ferrum-email-send = { version = "0.1", features = ["vault"] }
+```
+
+```rust
+use ferrum_email_send::vault::VaultCredentialStore;
+use std::sync::Arc;
+
+let store = VaultCredentialStore::new(vault);
+store.set_api_key("re_abc123_my_resend_key")?;
+store.set_smtp_credentials("user@example.com", "password", "smtp.example.com", 587)?;
+store.set_default_from("no-reply@example.com", Some("My App"))?;
+
+// Retrieve securely
+let api_key = store.get_api_key()?;
+let from = store.get_default_from()?;
+```
+
+All secrets encrypted with AES-256-GCM via [NexusVault](https://github.com/AutomataNexus/NexusVault).
+
 ## License
 
 MIT OR Apache-2.0

@@ -124,7 +124,10 @@ impl Component for Heading {
 
         let mut style = Style::new();
         style.color = self.color.clone();
-        style.font_size = Some(self.font_size.unwrap_or_else(|| self.level.default_font_size()));
+        style.font_size = Some(
+            self.font_size
+                .unwrap_or_else(|| self.level.default_font_size()),
+        );
         style.font_weight = self.font_weight;
         style.font_family = self.font_family.clone();
         style.line_height = self.line_height;
