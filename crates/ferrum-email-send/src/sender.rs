@@ -63,10 +63,7 @@ impl Sender {
     ) -> Result<SendResult, EmailError> {
         let html = self.renderer.render_html(component)?;
         let text = self.renderer.render_text(component).ok();
-        let subject = component
-            .subject()
-            .unwrap_or("(no subject)")
-            .to_string();
+        let subject = component.subject().unwrap_or("(no subject)").to_string();
 
         let message = EmailMessage {
             from: self.default_from.clone(),
@@ -95,10 +92,7 @@ impl Sender {
     ) -> Result<Vec<SendResult>, EmailError> {
         let html = self.renderer.render_html(component)?;
         let text = self.renderer.render_text(component).ok();
-        let subject = component
-            .subject()
-            .unwrap_or("(no subject)")
-            .to_string();
+        let subject = component.subject().unwrap_or("(no subject)").to_string();
 
         let messages: Vec<EmailMessage> = recipients
             .into_iter()

@@ -5,3 +5,8 @@
 .env
 *.pem
 *.key
+
+# Internal docs — not published to repo
+PRD.md
+PROGRESS.md
+ARCHITECTURE.md

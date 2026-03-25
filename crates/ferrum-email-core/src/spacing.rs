@@ -56,7 +56,11 @@ impl fmt::Display for Spacing {
         } else if self.top == self.bottom && self.left == self.right {
             write!(f, "{} {}", self.top, self.right)
         } else {
-            write!(f, "{} {} {} {}", self.top, self.right, self.bottom, self.left)
+            write!(
+                f,
+                "{} {} {} {}",
+                self.top, self.right, self.bottom, self.left
+            )
         }
     }
 }

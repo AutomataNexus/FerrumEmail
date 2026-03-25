@@ -208,10 +208,7 @@ mod tests {
 
     impl Component for SimpleEmail {
         fn render(&self) -> Node {
-            Node::Element(
-                Element::new(Tag::P)
-                    .child(Node::text("Hello, World!")),
-            )
+            Node::Element(Element::new(Tag::P).child(Node::text("Hello, World!")))
         }
     }
 
@@ -236,10 +233,7 @@ mod tests {
         struct EscapeEmail;
         impl Component for EscapeEmail {
             fn render(&self) -> Node {
-                Node::Element(
-                    Element::new(Tag::P)
-                        .child(Node::text("1 < 2 & 3 > 2")),
-                )
+                Node::Element(Element::new(Tag::P).child(Node::text("1 < 2 & 3 > 2")))
             }
         }
         let renderer = Renderer::new();

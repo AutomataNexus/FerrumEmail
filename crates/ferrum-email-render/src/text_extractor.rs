@@ -122,8 +122,17 @@ fn extract_children_text(children: &[Node]) -> String {
 fn is_block_element(tag: &Tag) -> bool {
     matches!(
         tag,
-        Tag::P | Tag::Div | Tag::H1 | Tag::H2 | Tag::H3 | Tag::H4 | Tag::H5 | Tag::H6
-            | Tag::Tr | Tag::Table | Tag::Pre
+        Tag::P
+            | Tag::Div
+            | Tag::H1
+            | Tag::H2
+            | Tag::H3
+            | Tag::H4
+            | Tag::H5
+            | Tag::H6
+            | Tag::Tr
+            | Tag::Table
+            | Tag::Pre
     )
 }
 
