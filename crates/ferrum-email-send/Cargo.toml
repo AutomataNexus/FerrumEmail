@@ -10,7 +10,7 @@ description = "Email provider abstraction and sending API for Ferrum Email"
 [features]
 default = ["smtp"]
 smtp = ["rustls", "tokio-rustls", "webpki-roots", "base64"]
-vault = ["dep:aegis-vault"]
+vault = ["dep:aegis-db-vault"]
 
 [dependencies]
 ferrum-email-core.workspace = true
@@ -23,9 +23,7 @@ tokio-rustls = { version = "0.26", default-features = false, features = ["ring",
 webpki-roots = { version = "0.26", optional = true }
 base64 = { version = "0.22", optional = true }
 
-# aegis-vault is resolved via [patch] in .cargo/config.toml locally,
-# and will resolve from crates.io once published there.
-aegis-vault = { version = "0.2.2", optional = true }
+aegis-db-vault = { version = "0.2.3", optional = true }
 
 [dev-dependencies]
 ferrum-email-components.workspace = true

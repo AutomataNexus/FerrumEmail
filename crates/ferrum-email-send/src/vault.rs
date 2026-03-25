@@ -26,7 +26,7 @@
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Initialize vault
-//! let vault = aegis_vault::AegisVault::init(aegis_vault::VaultConfig {
+//! let vault = aegis_db_vault::AegisVault::init(aegis_db_vault::VaultConfig {
 //!     data_dir: Some(std::path::PathBuf::from("/var/lib/ferrum/vault")),
 //!     auto_unseal: true,
 //!     passphrase: Some(std::env::var("VAULT_PASSPHRASE")?),
@@ -46,7 +46,7 @@
 
 use std::sync::Arc;
 
-use aegis_vault::AegisVault;
+use aegis_db_vault::AegisVault;
 
 use crate::error::EmailError;
 use crate::message::Mailbox;
