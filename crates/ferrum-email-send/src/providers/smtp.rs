@@ -172,7 +172,7 @@ impl EmailProvider for SmtpProvider {
         }
 
         // EHLO
-        send_command(&mut writer, &format!("EHLO ferrum-email\r\n")).await?;
+        send_command(&mut writer, "EHLO ferrum-email\r\n").await?;
         let ehlo_resp = read_response(&mut reader).await?;
         if !ehlo_resp.starts_with('2') {
             return Err(EmailError::Provider(format!("EHLO rejected: {ehlo_resp}")));
