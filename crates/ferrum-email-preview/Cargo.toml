@@ -1,0 +1,12 @@
+[package]
+name = "ferrum-email-preview"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Live preview server with hot-reload for Ferrum Email templates"
+
+[dependencies]
+ferrum-email-core.workspace = true
+ferrum-email-render.workspace = true

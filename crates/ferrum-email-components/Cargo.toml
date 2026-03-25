@@ -1,0 +1,11 @@
+[package]
+name = "ferrum-email-components"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Standard component library for Ferrum Email — Html, Body, Button, Text, and more"
+
+[dependencies]
+ferrum-email-core.workspace = true

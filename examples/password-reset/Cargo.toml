@@ -1,0 +1,12 @@
+[package]
+name = "example-password-reset"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+ferrum-email-core = { path = "../../crates/ferrum-email-core" }
+ferrum-email-components = { path = "../../crates/ferrum-email-components" }
+ferrum-email-render = { path = "../../crates/ferrum-email-render" }
+ferrum-email-send = { path = "../../crates/ferrum-email-send" }
+tokio = { version = "1", features = ["full"] }

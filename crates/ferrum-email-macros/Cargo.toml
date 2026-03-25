@@ -1,0 +1,13 @@
+[package]
+name = "ferrum-email-macros"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Proc macros for Ferrum Email — email! macro and preview registration"
+
+[lib]
+proc-macro = true
+
+[dependencies]
