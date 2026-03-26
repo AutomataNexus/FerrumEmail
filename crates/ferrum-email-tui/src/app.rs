@@ -18,8 +18,10 @@ const VAULT_PASSPHRASE: &str = "ferrum-email-vault-key";
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Tab {
-    Templates,
+    Inbox,
     Compose,
+    Outbox,
+    Templates,
     Preview,
     Vault,
     Send,
@@ -27,8 +29,10 @@ pub enum Tab {
 
 impl Tab {
     pub const ALL: &'static [Tab] = &[
-        Tab::Templates,
+        Tab::Inbox,
         Tab::Compose,
+        Tab::Outbox,
+        Tab::Templates,
         Tab::Preview,
         Tab::Vault,
         Tab::Send,
@@ -36,8 +40,10 @@ impl Tab {
 
     pub fn label(&self) -> &'static str {
         match self {
-            Tab::Templates => " Templates ",
+            Tab::Inbox => " Inbox ",
             Tab::Compose => " Compose ",
+            Tab::Outbox => " Outbox ",
+            Tab::Templates => " Templates ",
             Tab::Preview => " Preview ",
             Tab::Vault => " Vault ",
             Tab::Send => " Send ",
@@ -60,6 +66,16 @@ pub enum ComposeField {
     Body,
 }
 
+#[derive(Clone)]
+pub struct MailItem {
+    pub from: String,
+    pub to: String,
+    pub subject: String,
+    pub timestamp: String,
+    pub status: String,
+    pub preview: String,
+}
+
 pub struct App {
     pub tab: Tab,
     pub tab_index: usize,
@@ -73,6 +89,8 @@ pub struct App {
     pub compose_subject: String,
     pub compose_body: String,
     pub compose_field: ComposeField,
+    pub inbox: Vec<MailItem>,
+    pub outbox: Vec<MailItem>,
     pub vault_keys: Vec<String>,
     pub vault_status: String,
     pub send_to: String,
@@ -130,7 +148,7 @@ impl App {
         let preview_text = renderer.render_text(component.as_ref()).unwrap_or_default();
 
         Ok(App {
-            tab: Tab::Templates,
+            tab: Tab::Inbox,
             tab_index: 0,
             mode: Mode::Normal,
             selected_template: 0,
@@ -142,6 +160,17 @@ impl App {
             compose_subject: String::new(),
             compose_body: String::new(),
             compose_field: ComposeField::To,
+            inbox: vec![
+                MailItem {
+                    from: "system@ferrum-mail.com".into(),
+                    to: smtp_user.clone(),
+                    subject: "Welcome to Ferrum Mail".into(),
+                    timestamp: "just now".into(),
+                    status: "unread".into(),
+                    preview: "Your account is ready. Start sending emails with your API key.".into(),
+                },
+            ],
+            outbox: Vec::new(),
             vault_keys,
             vault_status,
             send_to: smtp_user.clone(),
@@ -243,6 +272,14 @@ impl App {
                     success: true,
                 };
                 self.send_history.push(record);
+                self.outbox.push(MailItem {
+                    from: self.from.to_string(),
+                    to: self.send_to.clone(),
+                    subject: template_meta.subject.to_string(),
+                    timestamp: "just now".into(),
+                    status: "sent".into(),
+                    preview: format!("Template: {}", template_meta.name),
+                });
                 self.message = Some((
                     format!(
                         "Sent \"{}\" to {} (ID: {})",
@@ -371,6 +408,14 @@ impl App {
                     success: true,
                 };
                 self.send_history.push(record);
+                self.outbox.push(MailItem {
+                    from: self.from.to_string(),
+                    to: self.compose_to.clone(),
+                    subject: self.compose_subject.clone(),
+                    timestamp: "just now".into(),
+                    status: "sent".into(),
+                    preview: self.compose_body.chars().take(80).collect(),
+                });
                 self.message = Some((
                     format!("Sent to {} (ID: {})", self.compose_to, result.message_id),
                     false,

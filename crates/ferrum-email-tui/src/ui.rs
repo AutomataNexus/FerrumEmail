@@ -82,8 +82,10 @@ fn draw_main(f: &mut Frame, app: &App, area: Rect) {
         Mode::Preview => draw_preview(f, app, area),
         Mode::Compose => draw_compose(f, app, area),
         _ => match app.tab {
-            Tab::Templates => draw_templates(f, app, area),
+            Tab::Inbox => draw_mailbox(f, app, area, "Inbox", &app.inbox),
             Tab::Compose => draw_compose(f, app, area),
+            Tab::Outbox => draw_mailbox(f, app, area, "Outbox", &app.outbox),
+            Tab::Templates => draw_templates(f, app, area),
             Tab::Preview => draw_preview(f, app, area),
             Tab::Vault => draw_vault(f, app, area),
             Tab::Send => draw_send_history(f, app, area),
@@ -210,6 +212,74 @@ fn draw_preview(f: &mut Frame, app: &App, area: Rect) {
             .style(Style::default().bg(theme::CARD_BG)),
     );
     f.render_widget(text_view, chunks[1]);
+}
+
+fn draw_mailbox(f: &mut Frame, _app: &App, area: Rect, title: &str, items: &[crate::app::MailItem]) {
+    if items.is_empty() {
+        let empty = Paragraph::new(vec![
+            Line::from(""),
+            Line::from(""),
+            Line::from(Span::styled(
+                format!("  No messages in {title}. Compose an email to get started."),
+                theme::text_dim(),
+            )),
+        ])
+        .block(
+            Block::default()
+                .title(Span::styled(format!(" {title} "), theme::label()))
+                .borders(Borders::ALL)
+                .border_style(theme::border_style())
+                .style(Style::default().bg(theme::CARD_BG)),
+        );
+        f.render_widget(empty, area);
+        return;
+    }
+
+    let mail_items: Vec<ListItem> = items
+        .iter()
+        .rev()
+        .map(|m| {
+            let status_style = if m.status == "unread" {
+                Style::default()
+                    .fg(theme::TERRACOTTA)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                theme::text_dim()
+            };
+            let subject_style = if m.status == "unread" {
+                Style::default()
+                    .fg(theme::TEXT)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                theme::text_normal()
+            };
+            let addr = if title == "Inbox" { &m.from } else { &m.to };
+            ListItem::new(vec![
+                Line::from(vec![
+                    Span::styled(format!("  {} ", if m.status == "unread" { "●" } else { " " }), status_style),
+                    Span::styled(format!("{:30}", addr), theme::label()),
+                    Span::styled(&m.subject, subject_style),
+                ]),
+                Line::from(vec![
+                    Span::styled("    ", theme::text_dim()),
+                    Span::styled(&m.preview, theme::text_dim()),
+                    Span::styled(format!("  {}", &m.timestamp), Style::default().fg(theme::TEXT_DIM)),
+                ]),
+            ])
+        })
+        .collect();
+
+    let list = List::new(mail_items).block(
+        Block::default()
+            .title(Span::styled(
+                format!(" {title} ({}) ", items.len()),
+                theme::label(),
+            ))
+            .borders(Borders::ALL)
+            .border_style(theme::border_style())
+            .style(Style::default().bg(theme::CARD_BG)),
+    );
+    f.render_widget(list, area);
 }
 
 fn draw_compose(f: &mut Frame, app: &App, area: Rect) {
