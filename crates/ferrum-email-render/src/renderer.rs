@@ -2,10 +2,10 @@
 
 use ferrum_email_core::{Component, Node};
 
+use crate::RenderError;
 use crate::css_inliner;
 use crate::html_emitter::{doctype, escape_attr, escape_text};
 use crate::text_extractor;
-use crate::RenderError;
 
 /// Configuration for the renderer.
 #[derive(Debug, Clone)]

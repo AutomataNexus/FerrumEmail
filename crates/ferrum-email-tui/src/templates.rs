@@ -113,29 +113,27 @@ fn email_shell(header_child: Node, body_children: Vec<Node>, subject: &str) -> N
     Html::new()
         .child(Head::new().title(subject))
         .child(
-            Body::new()
-                .background(Color::hex("FAFAF8"))
-                .child(
-                    Container::new()
-                        .max_width(Px(600))
-                        .padding(Spacing::xy(Px(20), Px(0)))
-                        .child_node(
-                            Section::new()
-                                .padding(Spacing::new(Px(40), Px(40), Px(20), Px(40)))
-                                .background(Color::hex("FFFEFA"))
-                                .text_align(TextAlign::Center)
-                                .child_node(header_child)
-                                .into_node(),
-                        )
-                        .child_node(
-                            Section::new()
-                                .padding(Spacing::new(Px(0), Px(40), Px(32), Px(40)))
-                                .background(Color::hex("FFFEFA"))
-                                .children(body_children)
-                                .into_node(),
-                        )
-                        .child_node(BrandedFooter.render()),
-                ),
+            Body::new().background(Color::hex("FAFAF8")).child(
+                Container::new()
+                    .max_width(Px(600))
+                    .padding(Spacing::xy(Px(20), Px(0)))
+                    .child_node(
+                        Section::new()
+                            .padding(Spacing::new(Px(40), Px(40), Px(20), Px(40)))
+                            .background(Color::hex("FFFEFA"))
+                            .text_align(TextAlign::Center)
+                            .child_node(header_child)
+                            .into_node(),
+                    )
+                    .child_node(
+                        Section::new()
+                            .padding(Spacing::new(Px(0), Px(40), Px(32), Px(40)))
+                            .background(Color::hex("FFFEFA"))
+                            .children(body_children)
+                            .into_node(),
+                    )
+                    .child_node(BrandedFooter.render()),
+            ),
         )
         .into_node()
 }
@@ -395,7 +393,16 @@ fn days_to_date(days: u64) -> (u64, u64, u64) {
     let mdays = [
         31,
         if leap { 29 } else { 28 },
-        31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
     ];
     let mut m = 0u64;
     for &md in &mdays {

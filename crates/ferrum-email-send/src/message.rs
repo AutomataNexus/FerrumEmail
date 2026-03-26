@@ -48,27 +48,26 @@ impl FromStr for Mailbox {
         let s = s.trim();
 
         // Try to parse "Name <email@domain.com>" format
-        if let Some(angle_start) = s.rfind('<') {
-            if let Some(angle_end) = s.rfind('>') {
-                if angle_end > angle_start {
-                    let email = s[angle_start + 1..angle_end].trim().to_string();
-                    let name = s[..angle_start].trim();
-                    let name = name.trim_matches('"').trim();
+        if let Some(angle_start) = s.rfind('<')
+            && let Some(angle_end) = s.rfind('>')
+            && angle_end > angle_start
+        {
+            let email = s[angle_start + 1..angle_end].trim().to_string();
+            let name = s[..angle_start].trim();
+            let name = name.trim_matches('"').trim();
 
-                    if email.is_empty() || !email.contains('@') {
-                        return Err(EmailError::InvalidAddress(s.to_string()));
-                    }
-
-                    return Ok(Mailbox {
-                        name: if name.is_empty() {
-                            None
-                        } else {
-                            Some(name.to_string())
-                        },
-                        email,
-                    });
-                }
+            if email.is_empty() || !email.contains('@') {
+                return Err(EmailError::InvalidAddress(s.to_string()));
             }
+
+            return Ok(Mailbox {
+                name: if name.is_empty() {
+                    None
+                } else {
+                    Some(name.to_string())
+                },
+                email,
+            });
         }
 
         // Plain email address

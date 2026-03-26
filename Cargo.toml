@@ -17,20 +17,20 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.1.0"
-edition = "2021"
+version = "0.1.1"
+edition = "2024"
 authors = ["Andrew Jewell Sr. <devops@automatanexus.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/AutomataNexus/ferrum-email"
 description = "Component-based email framework for Rust"
 
 [workspace.dependencies]
-ferrum-email-core = { path = "crates/ferrum-email-core", version = "0.1.0" }
-ferrum-email-components = { path = "crates/ferrum-email-components", version = "0.1.0" }
-ferrum-email-render = { path = "crates/ferrum-email-render", version = "0.1.0" }
-ferrum-email-send = { path = "crates/ferrum-email-send", version = "0.1.0" }
-ferrum-email-preview = { path = "crates/ferrum-email-preview", version = "0.1.0" }
-ferrum-email-macros = { path = "crates/ferrum-email-macros", version = "0.1.0" }
+ferrum-email-core = { path = "crates/ferrum-email-core", version = "0.1.1" }
+ferrum-email-components = { path = "crates/ferrum-email-components", version = "0.1.1" }
+ferrum-email-render = { path = "crates/ferrum-email-render", version = "0.1.1" }
+ferrum-email-send = { path = "crates/ferrum-email-send", version = "0.1.1" }
+ferrum-email-preview = { path = "crates/ferrum-email-preview", version = "0.1.1" }
+ferrum-email-macros = { path = "crates/ferrum-email-macros", version = "0.1.1" }
 
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"

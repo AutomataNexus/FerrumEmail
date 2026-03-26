@@ -138,10 +138,10 @@ fn is_block_element(tag: &Tag) -> bool {
 
 fn is_hidden_element(element: &ferrum_email_core::Element) -> bool {
     // Check for display:none in style
-    if let Some(ref display) = element.style.display {
-        if *display == ferrum_email_core::Display::None {
-            return true;
-        }
+    if let Some(ref display) = element.style.display
+        && *display == ferrum_email_core::Display::None
+    {
+        return true;
     }
     // Check for style attribute containing display:none
     element
