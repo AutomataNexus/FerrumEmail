@@ -142,7 +142,10 @@ impl fmt::Display for FontFamily {
         match self {
             FontFamily::Named(name) => write!(f, "{name}"),
             FontFamily::SansSerif => {
-                write!(f, "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif")
+                write!(
+                    f,
+                    "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+                )
             }
             FontFamily::Serif => write!(f, "Georgia, 'Times New Roman', Times, serif"),
             FontFamily::Monospace => {

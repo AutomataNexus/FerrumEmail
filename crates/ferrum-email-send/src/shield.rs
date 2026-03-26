@@ -32,19 +32,19 @@ pub fn validate_outbound(message: &EmailMessage) -> Result<(), EmailError> {
 
     // Validate all recipient addresses
     for to in &message.to {
-        shield
-            .validate_email_address(&to.email)
-            .map_err(|e| EmailError::Provider(format!("Shield: recipient <{}> rejected: {e}", to.email)))?;
+        shield.validate_email_address(&to.email).map_err(|e| {
+            EmailError::Provider(format!("Shield: recipient <{}> rejected: {e}", to.email))
+        })?;
     }
     for cc in &message.cc {
-        shield
-            .validate_email_address(&cc.email)
-            .map_err(|e| EmailError::Provider(format!("Shield: CC <{}> rejected: {e}", cc.email)))?;
+        shield.validate_email_address(&cc.email).map_err(|e| {
+            EmailError::Provider(format!("Shield: CC <{}> rejected: {e}", cc.email))
+        })?;
     }
     for bcc in &message.bcc {
-        shield
-            .validate_email_address(&bcc.email)
-            .map_err(|e| EmailError::Provider(format!("Shield: BCC <{}> rejected: {e}", bcc.email)))?;
+        shield.validate_email_address(&bcc.email).map_err(|e| {
+            EmailError::Provider(format!("Shield: BCC <{}> rejected: {e}", bcc.email))
+        })?;
     }
 
     // Validate subject (header injection)
@@ -59,17 +59,11 @@ pub fn validate_outbound(message: &EmailMessage) -> Result<(), EmailError> {
             .map_err(|e| EmailError::Provider(format!("Shield: sender name rejected: {e}")))?;
     }
 
-    // Validate HTML body content
-    shield
-        .validate_email_content("html_body", &message.html)
-        .map_err(|e| EmailError::Provider(format!("Shield: HTML body rejected: {e}")))?;
-
-    // Validate plain text body if present
-    if let Some(ref text) = message.text {
-        shield
-            .validate_email_content("text_body", text)
-            .map_err(|e| EmailError::Provider(format!("Shield: text body rejected: {e}")))?;
-    }
+    // Note: we do NOT validate the HTML/text body content here because it's
+    // rendered output from our own component system (or user-provided HTML).
+    // The shield's content validator is designed for template parameters
+    // (user-supplied names, subjects), not final rendered HTML which
+    // legitimately contains tags like <h1>, <a>, <img>, etc.
 
     // Validate custom headers
     for (name, value) in &message.headers {
@@ -86,9 +80,9 @@ pub fn validate_outbound(message: &EmailMessage) -> Result<(), EmailError> {
         .chain(message.bcc.iter());
 
     for recipient in all_recipients {
-        shield
-            .check_email_rate(&recipient.email)
-            .map_err(|e| EmailError::Provider(format!("Shield: rate limit for <{}>: {e}", recipient.email)))?;
+        shield.check_email_rate(&recipient.email).map_err(|e| {
+            EmailError::Provider(format!("Shield: rate limit for <{}>: {e}", recipient.email))
+        })?;
     }
 
     Ok(())

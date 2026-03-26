@@ -50,9 +50,7 @@ pub const WARNING: Color = Color::Rgb(200, 160, 80); // #C8A050
 // ── Style Presets ─────────────────────────────────────────
 
 pub fn title() -> Style {
-    Style::default()
-        .fg(TERRACOTTA)
-        .add_modifier(Modifier::BOLD)
+    Style::default().fg(TERRACOTTA).add_modifier(Modifier::BOLD)
 }
 
 pub fn title_secondary() -> Style {
@@ -72,9 +70,7 @@ pub fn text_dim() -> Style {
 }
 
 pub fn label() -> Style {
-    Style::default()
-        .fg(LABEL)
-        .add_modifier(Modifier::BOLD)
+    Style::default().fg(LABEL).add_modifier(Modifier::BOLD)
 }
 
 pub fn highlight() -> Style {
@@ -85,9 +81,7 @@ pub fn highlight() -> Style {
 }
 
 pub fn selected() -> Style {
-    Style::default()
-        .fg(TERRACOTTA)
-        .add_modifier(Modifier::BOLD)
+    Style::default().fg(TERRACOTTA).add_modifier(Modifier::BOLD)
 }
 
 pub fn border_style() -> Style {
@@ -105,15 +99,11 @@ pub fn tab_inactive() -> Style {
 }
 
 pub fn status_ok() -> Style {
-    Style::default()
-        .fg(SUCCESS)
-        .add_modifier(Modifier::BOLD)
+    Style::default().fg(SUCCESS).add_modifier(Modifier::BOLD)
 }
 
 pub fn status_err() -> Style {
-    Style::default()
-        .fg(ERROR)
-        .add_modifier(Modifier::BOLD)
+    Style::default().fg(ERROR).add_modifier(Modifier::BOLD)
 }
 
 pub fn keybind() -> Style {

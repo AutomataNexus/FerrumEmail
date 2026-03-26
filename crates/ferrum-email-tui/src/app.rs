@@ -26,7 +26,13 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub const ALL: &'static [Tab] = &[Tab::Templates, Tab::Compose, Tab::Preview, Tab::Vault, Tab::Send];
+    pub const ALL: &'static [Tab] = &[
+        Tab::Templates,
+        Tab::Compose,
+        Tab::Preview,
+        Tab::Vault,
+        Tab::Send,
+    ];
 
     pub fn label(&self) -> &'static str {
         match self {
@@ -166,8 +172,7 @@ impl App {
 
     pub fn next_item(&mut self) {
         if self.tab == Tab::Templates {
-            self.selected_template =
-                (self.selected_template + 1) % templates::TEMPLATES.len();
+            self.selected_template = (self.selected_template + 1) % templates::TEMPLATES.len();
         }
     }
 
@@ -187,8 +192,7 @@ impl App {
     }
 
     pub fn preview_selected(&mut self) {
-        let component =
-            templates::render_template(self.selected_template, &self.send_to);
+        let component = templates::render_template(self.selected_template, &self.send_to);
         self.preview_html = self
             .renderer
             .render_html(component.as_ref())
@@ -204,8 +208,7 @@ impl App {
     pub async fn send_selected(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.mode = Mode::Sending;
         let template_meta = &templates::TEMPLATES[self.selected_template];
-        let component =
-            templates::render_template(self.selected_template, &self.send_to);
+        let component = templates::render_template(self.selected_template, &self.send_to);
 
         let provider = SmtpProvider::builder()
             .host(&self.smtp_host)
@@ -310,9 +313,15 @@ impl App {
 
     pub fn compose_backspace(&mut self) {
         match self.compose_field {
-            ComposeField::To => { self.compose_to.pop(); }
-            ComposeField::Subject => { self.compose_subject.pop(); }
-            ComposeField::Body => { self.compose_body.pop(); }
+            ComposeField::To => {
+                self.compose_to.pop();
+            }
+            ComposeField::Subject => {
+                self.compose_subject.pop();
+            }
+            ComposeField::Body => {
+                self.compose_body.pop();
+            }
         }
     }
 
@@ -440,29 +449,23 @@ fn compose_to_html(subject: &str, body: &str) -> String {
                 .into_node(),
         );
 
-    let email = Html::new()
-        .child(Head::new().title(subject))
-        .child(
-            Body::new()
-                .background(Color::hex("FAFAF8"))
-                .child(
-                    Container::new()
-                        .max_width(Px(600))
-                        .padding(Spacing::xy(Px(20), Px(0)))
-                        .child_node(
-                            Section::new()
-                                .padding(Spacing::new(Px(40), Px(40), Px(20), Px(40)))
-                                .background(Color::hex("FFFEFA"))
-                                .text_align(TextAlign::Center)
-                                .child_node(
-                                    Image::new(FERRUM_LOGO, "Ferrum Email", Px(280)).into_node(),
-                                )
-                                .into_node(),
-                        )
-                        .child_node(section.into_node())
-                        .child_node(footer.into_node()),
-                ),
-        );
+    let email = Html::new().child(Head::new().title(subject)).child(
+        Body::new().background(Color::hex("FAFAF8")).child(
+            Container::new()
+                .max_width(Px(600))
+                .padding(Spacing::xy(Px(20), Px(0)))
+                .child_node(
+                    Section::new()
+                        .padding(Spacing::new(Px(40), Px(40), Px(20), Px(40)))
+                        .background(Color::hex("FFFEFA"))
+                        .text_align(TextAlign::Center)
+                        .child_node(Image::new(FERRUM_LOGO, "Ferrum Email", Px(280)).into_node())
+                        .into_node(),
+                )
+                .child_node(section.into_node())
+                .child_node(footer.into_node()),
+        ),
+    );
 
     let renderer = ferrum_email_render::Renderer::default();
     renderer.render_html(&email).unwrap_or_default()

@@ -5,7 +5,7 @@
 use ferrum_email_components::*;
 use ferrum_email_core::Component;
 use ferrum_email_render::Renderer;
-use ferrum_email_send::{providers::ConsoleProvider, Mailbox, Sender};
+use ferrum_email_send::{Mailbox, Sender, providers::ConsoleProvider};
 
 // ---------------------------------------------------------------------------
 // Test email templates

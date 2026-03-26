@@ -23,7 +23,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // header + tabs
-            Constraint::Min(10),  // main content
+            Constraint::Min(10),   // main content
             Constraint::Length(3), // status bar
         ])
         .split(size);
@@ -185,15 +185,13 @@ fn draw_preview(f: &mut Frame, app: &App, area: Rect) {
         .map(|l| Line::from(Span::styled(l, theme::text_muted())))
         .collect();
 
-    let html_view = Paragraph::new(html_lines)
-        .wrap(Wrap { trim: false })
-        .block(
-            Block::default()
-                .title(Span::styled(" HTML Output ", theme::label()))
-                .borders(Borders::ALL)
-                .border_style(theme::border_style())
-                .style(Style::default().bg(theme::CARD_BG)),
-        );
+    let html_view = Paragraph::new(html_lines).wrap(Wrap { trim: false }).block(
+        Block::default()
+            .title(Span::styled(" HTML Output ", theme::label()))
+            .borders(Borders::ALL)
+            .border_style(theme::border_style())
+            .style(Style::default().bg(theme::CARD_BG)),
+    );
     f.render_widget(html_view, chunks[0]);
 
     // Plain text preview
@@ -204,15 +202,13 @@ fn draw_preview(f: &mut Frame, app: &App, area: Rect) {
         .map(|l| Line::from(Span::styled(l, theme::text_normal())))
         .collect();
 
-    let text_view = Paragraph::new(text_lines)
-        .wrap(Wrap { trim: false })
-        .block(
-            Block::default()
-                .title(Span::styled(" Plain Text ", theme::label()))
-                .borders(Borders::ALL)
-                .border_style(theme::border_style())
-                .style(Style::default().bg(theme::CARD_BG)),
-        );
+    let text_view = Paragraph::new(text_lines).wrap(Wrap { trim: false }).block(
+        Block::default()
+            .title(Span::styled(" Plain Text ", theme::label()))
+            .borders(Borders::ALL)
+            .border_style(theme::border_style())
+            .style(Style::default().bg(theme::CARD_BG)),
+    );
     f.render_widget(text_view, chunks[1]);
 }
 
@@ -222,14 +218,16 @@ fn draw_compose(f: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // To
-            Constraint::Length(3),  // Subject
+            Constraint::Length(3), // To
+            Constraint::Length(3), // Subject
             Constraint::Min(8),    // Body
             Constraint::Length(3), // Help
         ])
         .split(area);
 
-    let cursor_style = Style::default().fg(theme::TERRACOTTA).add_modifier(Modifier::BOLD);
+    let cursor_style = Style::default()
+        .fg(theme::TERRACOTTA)
+        .add_modifier(Modifier::BOLD);
     let field_style = |field: ComposeField| {
         if is_editing && app.compose_field == field {
             Style::default().fg(theme::TERRACOTTA)
@@ -240,7 +238,14 @@ fn draw_compose(f: &mut Frame, app: &App, area: Rect) {
 
     // To field
     let to_block = Block::default()
-        .title(Span::styled(" To ", if is_editing && app.compose_field == ComposeField::To { cursor_style } else { theme::label() }))
+        .title(Span::styled(
+            " To ",
+            if is_editing && app.compose_field == ComposeField::To {
+                cursor_style
+            } else {
+                theme::label()
+            },
+        ))
         .borders(Borders::ALL)
         .border_style(field_style(ComposeField::To))
         .style(Style::default().bg(theme::CARD_BG));
@@ -253,7 +258,14 @@ fn draw_compose(f: &mut Frame, app: &App, area: Rect) {
 
     // Subject field
     let subj_block = Block::default()
-        .title(Span::styled(" Subject ", if is_editing && app.compose_field == ComposeField::Subject { cursor_style } else { theme::label() }))
+        .title(Span::styled(
+            " Subject ",
+            if is_editing && app.compose_field == ComposeField::Subject {
+                cursor_style
+            } else {
+                theme::label()
+            },
+        ))
         .borders(Borders::ALL)
         .border_style(field_style(ComposeField::Subject))
         .style(Style::default().bg(theme::CARD_BG));
@@ -266,7 +278,14 @@ fn draw_compose(f: &mut Frame, app: &App, area: Rect) {
 
     // Body field
     let body_block = Block::default()
-        .title(Span::styled(" Body ", if is_editing && app.compose_field == ComposeField::Body { cursor_style } else { theme::label() }))
+        .title(Span::styled(
+            " Body ",
+            if is_editing && app.compose_field == ComposeField::Body {
+                cursor_style
+            } else {
+                theme::label()
+            },
+        ))
         .borders(Borders::ALL)
         .border_style(field_style(ComposeField::Body))
         .style(Style::default().bg(theme::CARD_BG));
@@ -466,7 +485,12 @@ fn draw_statusbar(f: &mut Frame, app: &App, area: Rect) {
     // Branding
     let right = Paragraph::new(Line::from(vec![
         Span::styled("Secured by ", theme::text_dim()),
-        Span::styled("NexusVault ", Style::default().fg(theme::TEAL).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "NexusVault ",
+            Style::default()
+                .fg(theme::TEAL)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled(" ", theme::text_dim()),
     ]))
     .alignment(Alignment::Right)
