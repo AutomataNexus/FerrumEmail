@@ -47,7 +47,7 @@ impl SmtpProvider {
     }
 
     /// Build a MIME message from an EmailMessage.
-    fn build_mime(message: &EmailMessage) -> String {
+    pub fn build_mime(message: &EmailMessage) -> String {
         let boundary = format!("ferrum-{:016x}", rand_u64());
         let mut mime = String::with_capacity(message.html.len() + 1024);
 
