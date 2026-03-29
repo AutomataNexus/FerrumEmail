@@ -14,7 +14,11 @@ use ferrum_email_core::Component;
 use crate::templates;
 
 const VAULT_DIR: &str = "/var/lib/ferrum-email/vault";
-const VAULT_PASSPHRASE: &str = "ferrum-email-vault-key";
+
+fn vault_passphrase() -> String {
+    std::env::var("FERRUM_VAULT_PASSPHRASE")
+        .unwrap_or_else(|_| "ferrum-email-vault-key".to_string())
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Tab {
@@ -118,7 +122,7 @@ impl App {
         let config = VaultConfig {
             data_dir: Some(PathBuf::from(VAULT_DIR)),
             auto_unseal: true,
-            passphrase: Some(VAULT_PASSPHRASE.to_string()),
+            passphrase: Some(vault_passphrase()),
             ..Default::default()
         };
         let vault = AegisVault::init(config).await?;

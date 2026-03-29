@@ -68,7 +68,7 @@ jobs:
           sudo apt-get install -y musl-tools
 
       - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }} -p ferrum-email-cli
+        run: cargo build --release --target ${{ matrix.target }} -p ferrum-email-tui
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
@@ -125,10 +125,4 @@ jobs:
           sleep 30
           cargo publish -p ferrum-email-render --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
           sleep 30
-          cargo publish -p ferrum-email-macros --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
           cargo publish -p ferrum-email-send --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
-          cargo publish -p ferrum-email-preview --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
-          sleep 30
-          cargo publish -p ferrum-email-cli --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
