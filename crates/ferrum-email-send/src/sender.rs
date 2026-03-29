@@ -83,6 +83,21 @@ impl Sender {
 
     /// Send a pre-built EmailMessage directly via the provider.
     pub async fn send_message(&self, message: EmailMessage) -> Result<SendResult, EmailError> {
+        // Input size validation
+        if message.subject.len() > 998 {
+            return Err(EmailError::MissingField("Subject exceeds 998 character limit".into()));
+        }
+        if message.to.len() + message.cc.len() + message.bcc.len() > 500 {
+            return Err(EmailError::MissingField("Too many recipients (max 500)".into()));
+        }
+        if message.html.len() > 10_485_760 {
+            return Err(EmailError::MissingField("HTML body exceeds 10MB limit".into()));
+        }
+        let total_attachment_size: usize = message.attachments.iter().map(|a| a.content.len()).sum();
+        if total_attachment_size > 25_165_824 {
+            return Err(EmailError::MissingField("Attachments exceed 24MB limit".into()));
+        }
+
         // NexusShield validation before sending
         #[cfg(feature = "shield")]
         crate::shield::validate_outbound(&message)?;

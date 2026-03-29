@@ -56,7 +56,7 @@ impl FromStr for Mailbox {
             let name = s[..angle_start].trim();
             let name = name.trim_matches('"').trim();
 
-            if email.is_empty() || !email.contains('@') {
+            if !validate_email(&email) {
                 return Err(EmailError::InvalidAddress(s.to_string()));
             }
 
@@ -70,8 +70,8 @@ impl FromStr for Mailbox {
             });
         }
 
-        // Plain email address
-        if s.contains('@') && !s.contains(' ') {
+        // Plain email address — validate properly
+        if validate_email(s) {
             Ok(Mailbox {
                 name: None,
                 email: s.to_string(),
@@ -95,6 +95,49 @@ impl From<String> for Mailbox {
     fn from(s: String) -> Self {
         Mailbox::from(s.as_str())
     }
+}
+
+/// Validate an email address (RFC 5322 simplified).
+fn validate_email(email: &str) -> bool {
+    if email.len() > 254 || email.is_empty() {
+        return false;
+    }
+    let parts: Vec<&str> = email.splitn(2, '@').collect();
+    if parts.len() != 2 {
+        return false;
+    }
+    let (local, domain) = (parts[0], parts[1]);
+
+    // Local part: 1-64 chars, no spaces
+    if local.is_empty() || local.len() > 64 || local.contains(' ') {
+        return false;
+    }
+
+    // Domain: must have at least one dot, each label 1-63 chars, alphanumeric + hyphens
+    if domain.is_empty() || domain.len() > 253 {
+        return false;
+    }
+    let labels: Vec<&str> = domain.split('.').collect();
+    if labels.len() < 2 {
+        return false;
+    }
+    for label in &labels {
+        if label.is_empty() || label.len() > 63 {
+            return false;
+        }
+        if label.starts_with('-') || label.ends_with('-') {
+            return false;
+        }
+        if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            return false;
+        }
+    }
+    // TLD must be at least 2 chars and alphabetic
+    let tld = labels.last().unwrap();
+    if tld.len() < 2 || !tld.chars().all(|c| c.is_ascii_alphabetic()) {
+        return false;
+    }
+    true
 }
 
 /// A tag for categorizing emails (provider-specific).

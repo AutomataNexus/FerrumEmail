@@ -5,14 +5,15 @@ members = [
     "crates/ferrum-email-components",
     "crates/ferrum-email-render",
     "crates/ferrum-email-send",
-    "crates/ferrum-email-preview",
-    "crates/ferrum-email-macros",
-    "crates/ferrum-email-cli",
     "crates/ferrum-email-tui",
     "crates/ferrum-email",
     "examples/welcome",
     "examples/password-reset",
 ]
+# Phase 2/3 crates (not yet implemented, excluded from workspace):
+# "crates/ferrum-email-preview"
+# "crates/ferrum-email-macros"
+# "crates/ferrum-email-cli"
 exclude = [
     "tools/*",
 ]
@@ -23,7 +24,10 @@ edition = "2024"
 authors = ["Andrew Jewell Sr. <devops@automatanexus.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/AutomataNexus/ferrum-email"
+homepage = "https://ferrum-mail.com"
 description = "Component-based email framework for Rust"
+keywords = ["email", "email-templates", "smtp", "transactional-email", "rust"]
+categories = ["email", "web-programming"]
 
 [workspace.dependencies]
 ferrum-email-core = { path = "crates/ferrum-email-core", version = "0.1.1" }

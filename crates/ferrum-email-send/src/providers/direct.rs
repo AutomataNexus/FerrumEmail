@@ -52,6 +52,18 @@ impl DirectMxProvider {
     async fn resolve_mx(domain: &str) -> Result<Vec<String>, EmailError> {
         // Use tokio's DNS resolver to get MX records
         // We shell out to `dig` since tokio doesn't have native MX support
+        // Sanitize domain to prevent command injection
+        if domain.is_empty()
+            || domain.len() > 253
+            || !domain
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+        {
+            return Err(EmailError::Provider(format!(
+                "Invalid domain for MX lookup: {domain}"
+            )));
+        }
+
         let output = tokio::process::Command::new("dig")
             .args(["+short", "MX", domain])
             .output()

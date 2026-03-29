@@ -1,20 +1,24 @@
 [package]
 name = "ferrum-email-tui"
-version = "0.1.0"
-edition = "2021"
-authors = ["Andrew Jewell Sr. <devops@automatanexus.com>"]
-license = "MIT OR Apache-2.0"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
 description = "Terminal UI dashboard for Ferrum Email — preview, send, and manage email templates"
+publish = false
 
 [[bin]]
 name = "ferrum-tui"
 path = "src/main.rs"
 
 [dependencies]
-ferrum-email-core = { path = "../ferrum-email-core" }
-ferrum-email-components = { path = "../ferrum-email-components" }
-ferrum-email-render = { path = "../ferrum-email-render" }
-ferrum-email-send = { path = "../ferrum-email-send", features = ["smtp", "vault"] }
+ferrum-email-core.workspace = true
+ferrum-email-components.workspace = true
+ferrum-email-render.workspace = true
+ferrum-email-send = { workspace = true, features = ["smtp", "vault"] }
 aegis-db-vault = "0.2.3"
 ratatui = "0.29"
 crossterm = "0.28"

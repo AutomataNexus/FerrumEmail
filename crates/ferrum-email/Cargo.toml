@@ -5,9 +5,9 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
 description = "Component-based email framework for Rust — type-safe templates, cross-client rendering, unified sending API. The complete SDK."
-keywords = ["email", "email-templates", "smtp", "transactional-email", "rust"]
-categories = ["email", "web-programming"]
 readme = "README.md"
 
 [features]

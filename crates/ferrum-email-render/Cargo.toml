@@ -5,6 +5,8 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
 description = "Rendering engine for Ferrum Email — Node tree to HTML, plain text, and CSS inlining"
 
 [dependencies]
