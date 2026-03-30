@@ -1,11 +1,11 @@
 //! UI rendering for the Ferrum Email TUI dashboard.
 
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     prelude::*,
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph, Tabs, Wrap},
-    Frame,
 };
 
 use crate::app::{App, ComposeField, Mode, Tab};
@@ -214,7 +214,13 @@ fn draw_preview(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(text_view, chunks[1]);
 }
 
-fn draw_mailbox(f: &mut Frame, _app: &App, area: Rect, title: &str, items: &[crate::app::MailItem]) {
+fn draw_mailbox(
+    f: &mut Frame,
+    _app: &App,
+    area: Rect,
+    title: &str,
+    items: &[crate::app::MailItem],
+) {
     if items.is_empty() {
         let empty = Paragraph::new(vec![
             Line::from(""),
@@ -256,14 +262,20 @@ fn draw_mailbox(f: &mut Frame, _app: &App, area: Rect, title: &str, items: &[cra
             let addr = if title == "Inbox" { &m.from } else { &m.to };
             ListItem::new(vec![
                 Line::from(vec![
-                    Span::styled(format!("  {} ", if m.status == "unread" { "●" } else { " " }), status_style),
+                    Span::styled(
+                        format!("  {} ", if m.status == "unread" { "●" } else { " " }),
+                        status_style,
+                    ),
                     Span::styled(format!("{:30}", addr), theme::label()),
                     Span::styled(&m.subject, subject_style),
                 ]),
                 Line::from(vec![
                     Span::styled("    ", theme::text_dim()),
                     Span::styled(&m.preview, theme::text_dim()),
-                    Span::styled(format!("  {}", &m.timestamp), Style::default().fg(theme::TEXT_DIM)),
+                    Span::styled(
+                        format!("  {}", &m.timestamp),
+                        Style::default().fg(theme::TEXT_DIM),
+                    ),
                 ]),
             ])
         })

@@ -50,8 +50,8 @@ pub use provider::EmailProvider;
 pub use sender::Sender;
 
 #[cfg(feature = "smtp")]
-pub use providers::SmtpProvider;
-#[cfg(feature = "smtp")]
 pub use providers::DirectMxProvider;
+#[cfg(feature = "smtp")]
+pub use providers::SmtpProvider;
 #[cfg(feature = "vault")]
 pub use vault::VaultCredentialStore;

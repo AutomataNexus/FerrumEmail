@@ -7,7 +7,7 @@ use app::App;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::prelude::*;
 use std::io;
@@ -45,63 +45,64 @@ async fn run_app<B: Backend>(
     loop {
         terminal.draw(|f| ui::draw(f, app))?;
 
-        if event::poll(std::time::Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
-                if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
-                    return Ok(());
-                }
+        if event::poll(std::time::Duration::from_millis(100))?
+            && let Event::Key(key) = event::read()?
+        {
+            if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+                return Ok(());
+            }
 
-                match app.mode {
-                    app::Mode::Normal => match key.code {
-                        KeyCode::Char('q') => return Ok(()),
-                        KeyCode::Tab | KeyCode::Char('l') | KeyCode::Right => app.next_tab(),
-                        KeyCode::BackTab | KeyCode::Char('h') | KeyCode::Left => app.prev_tab(),
-                        KeyCode::Char('j') | KeyCode::Down => app.next_item(),
-                        KeyCode::Char('k') | KeyCode::Up => app.prev_item(),
-                        KeyCode::Enter => {
-                            if app.tab == app::Tab::Compose {
-                                app.enter_compose();
-                            } else {
-                                app.select_item().await?;
-                            }
+            match app.mode {
+                app::Mode::Normal => match key.code {
+                    KeyCode::Char('q') => return Ok(()),
+                    KeyCode::Tab | KeyCode::Char('l') | KeyCode::Right => app.next_tab(),
+                    KeyCode::BackTab | KeyCode::Char('h') | KeyCode::Left => app.prev_tab(),
+                    KeyCode::Char('j') | KeyCode::Down => app.next_item(),
+                    KeyCode::Char('k') | KeyCode::Up => app.prev_item(),
+                    KeyCode::Enter => {
+                        if app.tab == app::Tab::Compose {
+                            app.enter_compose();
+                        } else {
+                            app.select_item().await?;
                         }
-                        KeyCode::Char('s') => app.send_selected().await?,
-                        KeyCode::Char('p') => app.preview_selected(),
-                        KeyCode::Char('r') => app.refresh().await?,
-                        KeyCode::Esc => app.dismiss_message(),
-                        _ => {}
-                    },
-                    app::Mode::Compose => match key.code {
-                        KeyCode::Esc => app.mode = app::Mode::Normal,
-                        KeyCode::Tab => app.compose_next_field(),
-                        KeyCode::BackTab => app.compose_prev_field(),
-                        KeyCode::Char(ch) => {
-                            if key.modifiers.contains(KeyModifiers::CONTROL) && ch == 's' {
-                                app.compose_send().await?;
-                            } else {
-                                app.compose_type_char(ch);
-                            }
+                    }
+                    KeyCode::Char('s') => app.send_selected().await?,
+                    KeyCode::Char('p') => app.preview_selected(),
+                    KeyCode::Char('r') => app.refresh().await?,
+                    KeyCode::Esc => app.dismiss_message(),
+                    _ => {}
+                },
+                app::Mode::Compose => match key.code {
+                    KeyCode::Esc => app.mode = app::Mode::Normal,
+                    KeyCode::Tab => app.compose_next_field(),
+                    KeyCode::BackTab => app.compose_prev_field(),
+                    KeyCode::Char(ch) => {
+                        if key.modifiers.contains(KeyModifiers::CONTROL) && ch == 's' {
+                            app.compose_send().await?;
+                        } else {
+                            app.compose_type_char(ch);
                         }
-                        KeyCode::Backspace => app.compose_backspace(),
-                        KeyCode::Enter => {
-                            if key.modifiers.contains(KeyModifiers::CONTROL) {
-                                app.compose_send().await?;
-                            } else {
-                                app.compose_newline();
-                            }
+                    }
+                    KeyCode::Backspace => app.compose_backspace(),
+                    KeyCode::Enter => {
+                        if key.modifiers.contains(KeyModifiers::CONTROL) {
+                            app.compose_send().await?;
+                        } else {
+                            app.compose_newline();
                         }
-                        _ => {}
-                    },
-                    app::Mode::Preview => match key.code {
-                        KeyCode::Esc | KeyCode::Char('q') => app.mode = app::Mode::Normal,
-                        KeyCode::Char('j') | KeyCode::Down => app.scroll_down(),
-                        KeyCode::Char('k') | KeyCode::Up => app.scroll_up(),
-                        _ => {}
-                    },
-                    app::Mode::Sending => match key.code {
-                        KeyCode::Esc => app.mode = app::Mode::Normal,
-                        _ => {}
-                    },
+                    }
+                    _ => {}
+                },
+                app::Mode::Preview => match key.code {
+                    KeyCode::Esc | KeyCode::Char('q') => app.mode = app::Mode::Normal,
+                    KeyCode::Char('j') | KeyCode::Down => app.scroll_down(),
+                    KeyCode::Char('k') | KeyCode::Up => app.scroll_up(),
+                    _ => {}
+                },
+                app::Mode::Sending => {
+                    if key.code == KeyCode::Esc {
+                        app.mode = app::Mode::Normal;
+                    }
                 }
             }
         }

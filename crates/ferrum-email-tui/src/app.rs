@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use aegis_db_vault::{AegisVault, VaultConfig};
 use ferrum_email_render::Renderer;
+use ferrum_email_send::Sender;
 use ferrum_email_send::providers::SmtpProvider;
 use ferrum_email_send::vault::VaultCredentialStore;
-use ferrum_email_send::Sender;
 
 use crate::templates;
 
@@ -163,16 +163,14 @@ impl App {
             compose_subject: String::new(),
             compose_body: String::new(),
             compose_field: ComposeField::To,
-            inbox: vec![
-                MailItem {
-                    from: "system@ferrum-mail.com".into(),
-                    to: smtp_user.clone(),
-                    subject: "Welcome to Ferrum Mail".into(),
-                    timestamp: "just now".into(),
-                    status: "unread".into(),
-                    preview: "Your account is ready. Start sending emails with your API key.".into(),
-                },
-            ],
+            inbox: vec![MailItem {
+                from: "system@ferrum-mail.com".into(),
+                to: smtp_user.clone(),
+                subject: "Welcome to Ferrum Mail".into(),
+                timestamp: "just now".into(),
+                status: "unread".into(),
+                preview: "Your account is ready. Start sending emails with your API key.".into(),
+            }],
             outbox: Vec::new(),
             vault_keys,
             vault_status,
@@ -439,12 +437,9 @@ impl App {
 /// Convert compose text to branded HTML email.
 fn compose_to_html(subject: &str, body: &str) -> String {
     use ferrum_email_components::*;
-    
 
-    const FERRUM_LOGO: &str =
-        "https://raw.githubusercontent.com/AutomataNexus/FerrumEmail/master/assets/FerrumEmail_logo.PNG";
-    const NEXUS_LOGO: &str =
-        "https://raw.githubusercontent.com/AutomataNexus/FerrumEmail/master/assets/AutomataNexus_Logo.PNG";
+    const FERRUM_LOGO: &str = "https://raw.githubusercontent.com/AutomataNexus/FerrumEmail/master/assets/FerrumEmail_logo.PNG";
+    const NEXUS_LOGO: &str = "https://raw.githubusercontent.com/AutomataNexus/FerrumEmail/master/assets/AutomataNexus_Logo.PNG";
 
     let body_paragraphs: Vec<Node> = body
         .split('\n')

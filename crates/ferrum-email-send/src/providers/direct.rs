@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
 use crate::error::EmailError;
 use crate::message::{EmailMessage, SendResult};
@@ -113,9 +113,7 @@ impl DirectMxProvider {
         let addr = format!("{mx_host}:25");
         let tcp = timeout(CONNECT_TIMEOUT, TcpStream::connect(&addr))
             .await
-            .map_err(|_| {
-                EmailError::Provider(format!("connection to {addr} timed out after 15s"))
-            })?
+            .map_err(|_| EmailError::Provider(format!("connection to {addr} timed out after 15s")))?
             .map_err(|e| EmailError::Provider(format!("connect to {addr} failed: {e}")))?;
 
         let (reader, mut writer) = tokio::io::split(tcp);
@@ -130,7 +128,12 @@ impl DirectMxProvider {
         }
 
         // EHLO
-        timed_send(&mut writer, &format!("EHLO {}\r\n", self.ehlo_domain), CMD_TIMEOUT).await?;
+        timed_send(
+            &mut writer,
+            &format!("EHLO {}\r\n", self.ehlo_domain),
+            CMD_TIMEOUT,
+        )
+        .await?;
         let ehlo_resp = timed_read(&mut reader, CMD_TIMEOUT).await?;
         if !ehlo_resp.starts_with('2') {
             return Err(EmailError::Provider(format!(
@@ -147,9 +150,8 @@ impl DirectMxProvider {
 
             if starttls_resp.starts_with('2') {
                 // Upgrade to TLS
-                let server_name =
-                    rustls::pki_types::ServerName::try_from(mx_host.to_string())
-                        .map_err(|e| EmailError::Provider(format!("invalid server name: {e}")))?;
+                let server_name = rustls::pki_types::ServerName::try_from(mx_host.to_string())
+                    .map_err(|e| EmailError::Provider(format!("invalid server name: {e}")))?;
 
                 let tcp = reader.into_inner().unsplit(writer);
                 let connector = tokio_rustls::TlsConnector::from(self.tls_config.clone());
@@ -174,7 +176,14 @@ impl DirectMxProvider {
 
                 // Send envelope + data over TLS
                 return self
-                    .send_envelope(&mut tls_reader, &mut tls_writer, from, to, mime_body, mx_host)
+                    .send_envelope(
+                        &mut tls_reader,
+                        &mut tls_writer,
+                        from,
+                        to,
+                        mime_body,
+                        mx_host,
+                    )
                     .await;
             }
             // If STARTTLS failed, fall through to plaintext
