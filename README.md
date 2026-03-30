@@ -29,9 +29,18 @@
 
 ```toml
 [dependencies]
+ferrum-email = "0.1"
+tokio = { version = "1", features = ["full"] }
+```
+
+Or individual crates:
+
+```toml
+[dependencies]
 ferrum-email-core       = "0.1"
 ferrum-email-components = "0.1"
 ferrum-email-send       = "0.1"
+tokio = { version = "1", features = ["full"] }
 ```
 
 ```rust
@@ -56,7 +65,7 @@ impl Component for HelloEmail {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let sender = Sender::new(ConsoleProvider::new(), "me@example.com");
     sender.send(&HelloEmail { name: "World".into() }, "recipient@example.com").await?;
     Ok(())
@@ -213,15 +222,13 @@ All secrets are encrypted with AES-256-GCM via [NexusVault](https://github.com/A
 | [`ferrum-email-core`](crates/ferrum-email-core/) | Component trait, Node tree, Style system, types |
 | [`ferrum-email-components`](crates/ferrum-email-components/) | Standard component library |
 | [`ferrum-email-render`](crates/ferrum-email-render/) | HTML renderer, CSS inliner, plain text extractor |
-| [`ferrum-email-send`](crates/ferrum-email-send/) | Provider abstraction, Sender, ConsoleProvider, Vault |
-| [`ferrum-email-preview`](crates/ferrum-email-preview/) | Live preview server (Phase 2) |
-| [`ferrum-email-macros`](crates/ferrum-email-macros/) | `email!` proc macro (Phase 3) |
-| [`ferrum-email-cli`](crates/ferrum-email-cli/) | CLI binary (Phase 2/3) |
+| [`ferrum-email-send`](crates/ferrum-email-send/) | Provider abstraction, Sender, SMTP, DirectMX, Vault |
+| [`ferrum-email-tui`](crates/ferrum-email-tui/) | Terminal UI dashboard for managing email templates |
 
 ## Testing
 
 ```bash
-cargo test --workspace                 # Run all 44 tests
+cargo test --workspace                 # Run all tests
 cargo run -p example-welcome           # Run welcome email example
 cargo run -p example-password-reset    # Run password reset example
 ```
