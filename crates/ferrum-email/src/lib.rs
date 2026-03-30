@@ -104,8 +104,8 @@
 //! ```
 
 // Re-export all sub-crates
-pub use ferrum_email_core as core;
 pub use ferrum_email_components as components;
+pub use ferrum_email_core as core;
 pub use ferrum_email_render as render;
 pub use ferrum_email_send as send;
 
@@ -117,25 +117,23 @@ pub use ferrum_email_send as send;
 pub mod prelude {
     // Core types
     pub use ferrum_email_core::{
-        Component, Node, Element, Tag, Attr, Style, Border, BorderStyle,
-        Color, Spacing, Px, Percent, SizeValue,
-        FontFamily, FontWeight, TextAlign, VerticalAlign,
-        LineHeight, Display, TextDecoration, HeadingLevel,
+        Attr, Border, BorderStyle, Color, Component, Display, Element, FontFamily, FontWeight,
+        HeadingLevel, LineHeight, Node, Percent, Px, SizeValue, Spacing, Style, Tag, TextAlign,
+        TextDecoration, VerticalAlign,
     };
 
     // All components
     pub use ferrum_email_components::{
-        Html, Head, Body, Preview, Container, Section, Row, Column,
-        Text, Heading, Button, Link, Image, Hr, Code, CodeBlock, Spacer,
+        Body, Button, Code, CodeBlock, Column, Container, Head, Heading, Hr, Html, Image, Link,
+        Preview, Row, Section, Spacer, Text,
     };
 
     // Renderer
-    pub use ferrum_email_render::{Renderer, RenderConfig, RenderError};
+    pub use ferrum_email_render::{RenderConfig, RenderError, Renderer};
 
     // Sender and providers
     pub use ferrum_email_send::{
-        Sender, EmailProvider, EmailMessage, EmailError,
-        Mailbox, Attachment, EmailTag, SendResult,
+        Attachment, EmailError, EmailMessage, EmailProvider, EmailTag, Mailbox, SendResult, Sender,
     };
 
     // SMTP provider

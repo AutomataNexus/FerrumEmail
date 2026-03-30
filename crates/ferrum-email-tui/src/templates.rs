@@ -3,10 +3,8 @@
 use ferrum_email_components::*;
 use ferrum_email_core::Component;
 
-const FERRUM_LOGO: &str =
-    "https://raw.githubusercontent.com/AutomataNexus/FerrumEmail/master/assets/FerrumEmail_logo.PNG";
-const NEXUS_LOGO: &str =
-    "https://raw.githubusercontent.com/AutomataNexus/FerrumEmail/master/assets/AutomataNexus_Logo.PNG";
+const FERRUM_LOGO: &str = "https://raw.githubusercontent.com/AutomataNexus/FerrumEmail/master/assets/FerrumEmail_logo.PNG";
+const NEXUS_LOGO: &str = "https://raw.githubusercontent.com/AutomataNexus/FerrumEmail/master/assets/AutomataNexus_Logo.PNG";
 
 /// Template metadata for display in the TUI.
 pub struct TemplateMeta {
@@ -378,7 +376,7 @@ fn days_to_date(days: u64) -> (u64, u64, u64) {
     let mut y = 1970u64;
     let mut r = days;
     loop {
-        let diy = if (y % 4 == 0 && y % 100 != 0) || y % 400 == 0 {
+        let diy = if (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400) {
             366
         } else {
             365
@@ -389,7 +387,7 @@ fn days_to_date(days: u64) -> (u64, u64, u64) {
         r -= diy;
         y += 1;
     }
-    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    let leap = (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400);
     let mdays = [
         31,
         if leap { 29 } else { 28 },
