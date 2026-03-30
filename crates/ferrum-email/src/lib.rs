@@ -142,6 +142,14 @@ pub mod prelude {
     #[cfg(feature = "smtp")]
     pub use ferrum_email_send::providers::SmtpProvider;
 
+    // Direct MX delivery (NexusRelay)
+    #[cfg(feature = "smtp")]
+    pub use ferrum_email_send::providers::DirectMxProvider;
+
     // Console provider (always available)
     pub use ferrum_email_send::providers::ConsoleProvider;
+
+    // Vault credential store
+    #[cfg(feature = "vault")]
+    pub use ferrum_email_send::VaultCredentialStore;
 }

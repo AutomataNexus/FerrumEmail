@@ -48,3 +48,10 @@ pub use error::EmailError;
 pub use message::{Attachment, EmailMessage, EmailTag, Mailbox, SendResult};
 pub use provider::EmailProvider;
 pub use sender::Sender;
+
+#[cfg(feature = "smtp")]
+pub use providers::SmtpProvider;
+#[cfg(feature = "smtp")]
+pub use providers::DirectMxProvider;
+#[cfg(feature = "vault")]
+pub use vault::VaultCredentialStore;

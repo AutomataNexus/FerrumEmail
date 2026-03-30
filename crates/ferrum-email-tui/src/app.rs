@@ -9,8 +9,6 @@ use ferrum_email_send::providers::SmtpProvider;
 use ferrum_email_send::vault::VaultCredentialStore;
 use ferrum_email_send::Sender;
 
-use ferrum_email_core::Component;
-
 use crate::templates;
 
 const VAULT_DIR: &str = "/var/lib/ferrum-email/vault";
@@ -109,6 +107,7 @@ pub struct App {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct SendRecord {
     pub template: String,
     pub to: String,
@@ -440,7 +439,7 @@ impl App {
 /// Convert compose text to branded HTML email.
 fn compose_to_html(subject: &str, body: &str) -> String {
     use ferrum_email_components::*;
-    use ferrum_email_core::Component;
+    
 
     const FERRUM_LOGO: &str =
         "https://raw.githubusercontent.com/AutomataNexus/FerrumEmail/master/assets/FerrumEmail_logo.PNG";

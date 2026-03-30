@@ -2,6 +2,7 @@
 //!
 //! Cream, warm terracotta, ultra-light teal, sandy greys —
 //! matching the Ferrum Email brand palette.
+#![allow(dead_code)]
 
 use ratatui::style::{Color, Modifier, Style};
 
