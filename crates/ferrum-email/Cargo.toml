@@ -17,7 +17,7 @@ shield = ["ferrum-email-send/shield"]
 vault = ["ferrum-email-send/vault"]
 
 [dependencies]
-ferrum-email-core = { version = "0.1.1", path = "../ferrum-email-core" }
-ferrum-email-components = { version = "0.1.1", path = "../ferrum-email-components" }
-ferrum-email-render = { version = "0.1.1", path = "../ferrum-email-render" }
-ferrum-email-send = { version = "0.1.1", path = "../ferrum-email-send" }
+ferrum-email-core = { version = "0.1.2", path = "../ferrum-email-core" }
+ferrum-email-components = { version = "0.1.2", path = "../ferrum-email-components" }
+ferrum-email-render = { version = "0.1.2", path = "../ferrum-email-render" }
+ferrum-email-send = { version = "0.1.2", path = "../ferrum-email-send" }
