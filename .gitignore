@@ -16,3 +16,5 @@ ARCHITECTURE.md
 
 # Local tools (contain vault-seeded credentials)
 tools/
+FERRUM_SUITE_DOCUMENTATION.md
+mdpdf.log
