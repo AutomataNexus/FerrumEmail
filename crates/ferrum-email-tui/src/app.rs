@@ -117,6 +117,71 @@ pub struct SendRecord {
 }
 
 impl App {
+    /// Create app with SaaS session credentials (primary flow).
+    pub async fn new_with_session(
+        session: &crate::auth::Session,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let (smtp_host, smtp_port, smtp_user, smtp_pass) =
+            crate::auth::smtp_config_for_session(session);
+        let from = ferrum_email_send::Mailbox::address(&session.email);
+
+        // Initialize vault for local credential caching
+        let config = VaultConfig {
+            data_dir: Some(PathBuf::from(VAULT_DIR)),
+            auto_unseal: true,
+            passphrase: Some(vault_passphrase()),
+            ..Default::default()
+        };
+        let vault = AegisVault::init(config).await?;
+        let vault = Arc::new(vault);
+        let store = VaultCredentialStore::new(vault.clone());
+        let vault_keys = store.list_keys().unwrap_or_default();
+
+        let vault_status = format!("Logged in as {}", session.email);
+        let renderer = Renderer::default();
+
+        let component = templates::render_template(0, &session.email);
+        let preview_html = renderer.render_html(component.as_ref()).unwrap_or_default();
+        let preview_text = renderer.render_text(component.as_ref()).unwrap_or_default();
+
+        Ok(App {
+            tab: Tab::Inbox,
+            tab_index: 0,
+            mode: Mode::Normal,
+            selected_template: 0,
+            preview_html,
+            preview_text,
+            preview_scroll: 0,
+            message: None,
+            compose_to: session.email.clone(),
+            compose_subject: String::new(),
+            compose_body: String::new(),
+            compose_field: ComposeField::To,
+            inbox: vec![MailItem {
+                from: "system@ferrum-mail.com".into(),
+                to: session.email.clone(),
+                subject: "Welcome to Ferrum Mail".into(),
+                timestamp: "just now".into(),
+                status: "unread".into(),
+                preview: "Your account is ready. Start sending emails with the TUI.".into(),
+            }],
+            outbox: Vec::new(),
+            vault_keys,
+            vault_status,
+            send_to: session.email.clone(),
+            send_history: Vec::new(),
+            renderer,
+            store,
+            smtp_host,
+            smtp_port,
+            smtp_user,
+            smtp_pass,
+            from,
+        })
+    }
+
+    /// Create app with local vault credentials (fallback for self-hosted).
+    #[allow(dead_code)]
     pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let config = VaultConfig {
             data_dir: Some(PathBuf::from(VAULT_DIR)),
@@ -144,8 +209,6 @@ impl App {
         };
 
         let renderer = Renderer::default();
-
-        // Pre-render first template
         let component = templates::render_template(0, &smtp_user);
         let preview_html = renderer.render_html(component.as_ref()).unwrap_or_default();
         let preview_text = renderer.render_text(component.as_ref()).unwrap_or_default();
