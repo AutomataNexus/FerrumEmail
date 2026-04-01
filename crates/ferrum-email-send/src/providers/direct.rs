@@ -109,12 +109,21 @@ impl DirectMxProvider {
         to: &str,
         mime_body: &str,
     ) -> Result<String, EmailError> {
-        // Connect with timeout
-        let addr = format!("{mx_host}:25");
-        let tcp = timeout(CONNECT_TIMEOUT, TcpStream::connect(&addr))
-            .await
-            .map_err(|_| EmailError::Provider(format!("connection to {addr} timed out after 15s")))?
-            .map_err(|e| EmailError::Provider(format!("connect to {addr} failed: {e}")))?;
+        // Try port 587 (submission) first, fall back to port 25 (SMTP)
+        let (tcp, addr) = {
+            let addr587 = format!("{mx_host}:587");
+            match timeout(Duration::from_secs(5), TcpStream::connect(&addr587)).await {
+                Ok(Ok(stream)) => (stream, addr587),
+                _ => {
+                    let addr25 = format!("{mx_host}:25");
+                    let stream = timeout(CONNECT_TIMEOUT, TcpStream::connect(&addr25))
+                        .await
+                        .map_err(|_| EmailError::Provider(format!("connection to {mx_host} timed out (tried 587 and 25)")))?
+                        .map_err(|e| EmailError::Provider(format!("connect to {addr25} failed: {e}")))?;
+                    (stream, addr25)
+                }
+            }
+        };
 
         let (reader, mut writer) = tokio::io::split(tcp);
         let mut reader = BufReader::new(reader);
