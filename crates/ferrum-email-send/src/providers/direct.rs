@@ -118,8 +118,14 @@ impl DirectMxProvider {
                     let addr25 = format!("{mx_host}:25");
                     let stream = timeout(CONNECT_TIMEOUT, TcpStream::connect(&addr25))
                         .await
-                        .map_err(|_| EmailError::Provider(format!("connection to {mx_host} timed out (tried 587 and 25)")))?
-                        .map_err(|e| EmailError::Provider(format!("connect to {addr25} failed: {e}")))?;
+                        .map_err(|_| {
+                            EmailError::Provider(format!(
+                                "connection to {mx_host} timed out (tried 587 and 25)"
+                            ))
+                        })?
+                        .map_err(|e| {
+                            EmailError::Provider(format!("connect to {addr25} failed: {e}"))
+                        })?;
                     (stream, addr25)
                 }
             }
