@@ -110,7 +110,7 @@ impl DirectMxProvider {
         mime_body: &str,
     ) -> Result<String, EmailError> {
         // Try port 587 (submission) first, fall back to port 25 (SMTP)
-        let (tcp, addr) = {
+        let (tcp, _addr) = {
             let addr587 = format!("{mx_host}:587");
             match timeout(Duration::from_secs(5), TcpStream::connect(&addr587)).await {
                 Ok(Ok(stream)) => (stream, addr587),
