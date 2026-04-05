@@ -1,25 +1,26 @@
-//! NexusRelay SMTP Proxy — HTTP-to-SMTP relay via authenticated submission.
+//! NexusRelay — direct MX SMTP delivery with DKIM signing.
 //!
-//! Runs on a machine with outbound port 587 access.
-//! Accepts email relay requests over HTTP (Tailscale) and submits
-//! through an authenticated SMTP relay (Office 365).
+//! Runs on a machine with outbound port 25 access (Vultr).
+//! Accepts HTTP relay requests over Tailscale, resolves recipient MX records,
+//! signs with DKIM, and delivers directly to each recipient's mail server.
 
-use axum::{extract::Json, http::StatusCode, routing::post, Router};
+use axum::{Router, extract::Json, http::StatusCode, routing::post};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const CMD_TIMEOUT: Duration = Duration::from_secs(30);
+const DATA_TIMEOUT: Duration = Duration::from_secs(60);
 
-// SMTP submission relay config (loaded from env)
 struct RelayConfig {
-    smtp_host: String,
-    smtp_port: u16,
-    smtp_user: String,
-    smtp_pass: String,
+    ehlo_domain: String,
+    dkim_key_path: String,
+    dkim_domain: String,
+    dkim_selector: String,
+    tls_config: Arc<rustls::ClientConfig>,
 }
 
 #[derive(Deserialize)]
@@ -33,6 +34,8 @@ struct RelayRequest {
 struct RelayResponse {
     message_id: String,
     status: String,
+    delivered: usize,
+    failed: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -49,32 +52,46 @@ async fn main() {
         )
         .init();
 
+    let root_store =
+        rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let tls_config = rustls::ClientConfig::builder()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
+
     let config = Arc::new(RelayConfig {
-        smtp_host: std::env::var("SMTP_HOST").unwrap_or_else(|_| "smtp.office365.com".into()),
-        smtp_port: std::env::var("SMTP_PORT")
-            .ok()
-            .and_then(|p| p.parse().ok())
-            .unwrap_or(587),
-        smtp_user: std::env::var("SMTP_USER").expect("SMTP_USER required"),
-        smtp_pass: std::env::var("SMTP_PASS").expect("SMTP_PASS required"),
+        ehlo_domain: std::env::var("EHLO_DOMAIN")
+            .unwrap_or_else(|_| "relay.ferrum-mail.com".into()),
+        dkim_key_path: std::env::var("DKIM_KEY_PATH")
+            .unwrap_or_else(|_| "/var/lib/ferrum-email/dkim/ferrum-mail.com.private".into()),
+        dkim_domain: std::env::var("DKIM_DOMAIN").unwrap_or_else(|_| "ferrum-mail.com".into()),
+        dkim_selector: std::env::var("DKIM_SELECTOR").unwrap_or_else(|_| "ferrum".into()),
+        tls_config: Arc::new(tls_config),
     });
 
     tracing::info!(
-        "NexusRelay using {}:{} as {}",
-        config.smtp_host,
-        config.smtp_port,
-        config.smtp_user
+        "NexusRelay v0.2 — direct MX delivery, DKIM domain={} selector={}",
+        config.dkim_domain,
+        config.dkim_selector
     );
+
+    // Validate DKIM key exists
+    if !std::path::Path::new(&config.dkim_key_path).exists() {
+        tracing::warn!(
+            "DKIM private key not found at {} — emails will NOT be signed",
+            config.dkim_key_path
+        );
+    } else {
+        tracing::info!("DKIM key loaded: {}", config.dkim_key_path);
+    }
 
     let app = Router::new()
         .route("/relay", post(handle_relay))
         .route("/health", axum::routing::get(|| async { "ok" }))
-        .layer(axum::extract::DefaultBodyLimit::max(26_214_400)) // 25MB
+        .layer(axum::extract::DefaultBodyLimit::max(26_214_400))
         .with_state(config);
 
     let addr = "0.0.0.0:9587";
     tracing::info!("NexusRelay listening on {addr}");
-
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
@@ -85,35 +102,193 @@ async fn handle_relay(
 ) -> Result<Json<RelayResponse>, (StatusCode, Json<RelayError>)> {
     tracing::info!("Relay: {} -> {}", req.from, req.to.join(", "));
 
-    match deliver_via_submission(&config, &req.from, &req.to, &req.mime_body).await {
-        Ok(mid) => {
-            tracing::info!("Delivered via {}", config.smtp_host);
-            Ok(Json(RelayResponse {
-                message_id: mid,
-                status: "sent".into(),
-            }))
-        }
+    // Sign with DKIM
+    let signed_body = match sign_dkim(&config, &req.mime_body) {
+        Ok(s) => s,
         Err(e) => {
-            tracing::error!("Relay failed: {e}");
-            Err((
-                StatusCode::BAD_GATEWAY,
-                Json(RelayError { error: e }),
-            ))
+            tracing::warn!("DKIM signing failed: {e} — sending unsigned");
+            req.mime_body.clone()
         }
+    };
+
+    let mut delivered = 0;
+    let mut failed = Vec::new();
+    let mut last_mid = String::new();
+
+    // Group recipients by domain for efficient delivery
+    let mut by_domain: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    for rcpt in &req.to {
+        if let Some(domain) = rcpt.rsplit('@').next() {
+            by_domain
+                .entry(domain.to_lowercase())
+                .or_default()
+                .push(rcpt.clone());
+        }
+    }
+
+    for (domain, recipients) in by_domain {
+        match deliver_to_domain(&config, &req.from, &domain, &recipients, &signed_body).await {
+            Ok(mid) => {
+                delivered += recipients.len();
+                last_mid = mid;
+            }
+            Err(e) => {
+                tracing::error!("Delivery to {domain} failed: {e}");
+                for r in recipients {
+                    failed.push(format!("{r}: {e}"));
+                }
+            }
+        }
+    }
+
+    if delivered == 0 && !failed.is_empty() {
+        return Err((
+            StatusCode::BAD_GATEWAY,
+            Json(RelayError {
+                error: failed.join("; "),
+            }),
+        ));
+    }
+
+    Ok(Json(RelayResponse {
+        message_id: last_mid,
+        status: if failed.is_empty() {
+            "sent".into()
+        } else {
+            "partial".into()
+        },
+        delivered,
+        failed,
+    }))
+}
+
+/// DKIM sign the MIME body using mail-auth.
+fn sign_dkim(config: &RelayConfig, mime_body: &str) -> Result<String, String> {
+    use mail_auth::common::crypto::{RsaKey, Sha256};
+    use mail_auth::common::headers::HeaderWriter;
+    use mail_auth::dkim::DkimSigner;
+
+    let pem = std::fs::read_to_string(&config.dkim_key_path)
+        .map_err(|e| format!("read DKIM key: {e}"))?;
+
+    let pk = RsaKey::<Sha256>::from_rsa_pem(&pem)
+        .or_else(|_| RsaKey::<Sha256>::from_pkcs8_pem(&pem))
+        .map_err(|e| format!("parse DKIM key: {e:?}"))?;
+
+    let signer = DkimSigner::from_key(pk)
+        .domain(&config.dkim_domain)
+        .selector(&config.dkim_selector)
+        .headers(["From", "To", "Subject", "Date", "Message-ID"]);
+
+    let signature = signer
+        .sign(mime_body.as_bytes())
+        .map_err(|e| format!("DKIM sign: {e:?}"))?;
+
+    // Prepend the signature header to the message
+    let mut header = Vec::with_capacity(512);
+    signature.write_header(&mut header);
+    let header_str = String::from_utf8(header).map_err(|e| format!("DKIM header utf8: {e}"))?;
+    Ok(format!("{header_str}{mime_body}"))
+}
+
+/// Resolve hostname to IPv4 address using explicit resolver.
+async fn resolve_ipv4(host: &str) -> Result<String, String> {
+    let output = tokio::process::Command::new("dig")
+        .args(["@8.8.8.8", "+short", "+time=5", "+tries=2", "A", host])
+        .output()
+        .await
+        .map_err(|e| format!("dig A {host}: {e}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .find(|l| l.chars().all(|c| c.is_ascii_digit() || c == '.'))
+        .map(|s| s.to_string())
+        .ok_or_else(|| format!("no A record for {host}"))
+}
+
+/// Resolve MX records for a domain (using explicit resolver).
+async fn resolve_mx(domain: &str) -> Result<Vec<String>, String> {
+    if domain.is_empty()
+        || domain.len() > 253
+        || !domain
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+    {
+        return Err(format!("invalid domain: {domain}"));
+    }
+
+    let output = tokio::process::Command::new("dig")
+        .args(["@8.8.8.8", "+short", "+time=5", "+tries=2", "MX", domain])
+        .output()
+        .await
+        .map_err(|e| format!("dig: {e}"))?;
+
+    if !output.status.success() {
+        return Err(format!("dig failed for {domain}"));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut mx: Vec<(u16, String)> = stdout
+        .lines()
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() == 2 {
+                let prio = parts[0].parse::<u16>().ok()?;
+                let host = parts[1].trim_end_matches('.').to_string();
+                Some((prio, host))
+            } else {
+                None
+            }
+        })
+        .collect();
+    mx.sort_by_key(|(p, _)| *p);
+
+    if mx.is_empty() {
+        // Fall back to A record (domain itself acts as MX)
+        Ok(vec![domain.to_string()])
+    } else {
+        Ok(mx.into_iter().map(|(_, h)| h).collect())
     }
 }
 
-async fn deliver_via_submission(
+/// Deliver a message to all recipients in one domain (one connection).
+async fn deliver_to_domain(
     config: &RelayConfig,
     from: &str,
-    to: &[String],
+    domain: &str,
+    recipients: &[String],
     mime_body: &str,
 ) -> Result<String, String> {
-    let addr = format!("{}:{}", config.smtp_host, config.smtp_port);
+    let mx_hosts = resolve_mx(domain).await?;
+    let mut last_err = String::new();
+
+    for mx_host in &mx_hosts {
+        match try_deliver(config, mx_host, from, recipients, mime_body).await {
+            Ok(mid) => return Ok(mid),
+            Err(e) => {
+                tracing::warn!("MX {mx_host} failed: {e}");
+                last_err = e;
+            }
+        }
+    }
+    Err(format!("all MX hosts failed: {last_err}"))
+}
+
+async fn try_deliver(
+    config: &RelayConfig,
+    mx_host: &str,
+    from: &str,
+    recipients: &[String],
+    mime_body: &str,
+) -> Result<String, String> {
+    // Pre-resolve hostname to IP (system resolver may be unreliable)
+    let ip = resolve_ipv4(mx_host).await?;
+    let addr = format!("{ip}:25");
     let tcp = timeout(CONNECT_TIMEOUT, TcpStream::connect(&addr))
         .await
-        .map_err(|_| format!("timeout connecting to {addr}"))?
-        .map_err(|e| format!("connect to {addr}: {e}"))?;
+        .map_err(|_| format!("timeout connecting to {mx_host} ({addr})"))?
+        .map_err(|e| format!("connect {mx_host} ({addr}): {e}"))?;
 
     let (reader, mut writer) = tokio::io::split(tcp);
     let mut reader = BufReader::new(reader);
@@ -125,101 +300,81 @@ async fn deliver_via_submission(
     }
 
     // EHLO
-    send_cmd(&mut writer, "EHLO nexus-relay.ferrum-mail.com\r\n").await?;
+    send_cmd(&mut writer, &format!("EHLO {}\r\n", config.ehlo_domain)).await?;
     let ehlo = read_resp(&mut reader).await?;
     if !ehlo.starts_with('2') {
         return Err(format!("EHLO: {ehlo}"));
     }
 
-    // STARTTLS
-    send_cmd(&mut writer, "STARTTLS\r\n").await?;
-    let tls_resp = read_resp(&mut reader).await?;
-    if !tls_resp.starts_with('2') {
-        return Err(format!("STARTTLS: {tls_resp}"));
+    let supports_tls = ehlo.to_uppercase().contains("STARTTLS");
+
+    if supports_tls {
+        send_cmd(&mut writer, "STARTTLS\r\n").await?;
+        let tls_resp = read_resp(&mut reader).await?;
+        if tls_resp.starts_with('2') {
+            let server_name = rustls::pki_types::ServerName::try_from(mx_host.to_string())
+                .map_err(|e| format!("bad server name: {e}"))?;
+            let tcp = reader.into_inner().unsplit(writer);
+            let connector = tokio_rustls::TlsConnector::from(config.tls_config.clone());
+            let tls_stream = timeout(CONNECT_TIMEOUT, connector.connect(server_name, tcp))
+                .await
+                .map_err(|_| "TLS handshake timeout".to_string())?
+                .map_err(|e| format!("TLS handshake: {e}"))?;
+
+            let (tls_reader, mut tls_writer) = tokio::io::split(tls_stream);
+            let mut tls_reader = BufReader::new(tls_reader);
+
+            // EHLO again after TLS
+            send_cmd(&mut tls_writer, &format!("EHLO {}\r\n", config.ehlo_domain)).await?;
+            let _ = read_resp(&mut tls_reader).await?;
+
+            return send_envelope(&mut tls_reader, &mut tls_writer, from, recipients, mime_body)
+                .await;
+        }
     }
 
-    // TLS upgrade
-    let server_name = rustls::pki_types::ServerName::try_from(config.smtp_host.clone())
-        .map_err(|e| format!("bad server name: {e}"))?;
-    let root_store =
-        rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    let tls_config = rustls::ClientConfig::builder()
-        .with_root_certificates(root_store)
-        .with_no_client_auth();
-    let tcp = reader.into_inner().unsplit(writer);
-    let connector = tokio_rustls::TlsConnector::from(Arc::new(tls_config));
-    let tls_stream = connector
-        .connect(server_name, tcp)
-        .await
-        .map_err(|e| format!("TLS: {e}"))?;
+    send_envelope(&mut reader, &mut writer, from, recipients, mime_body).await
+}
 
-    let (tls_reader, mut tls_writer) = tokio::io::split(tls_stream);
-    let mut tls_reader = BufReader::new(tls_reader);
-
-    // EHLO again
-    send_cmd(&mut tls_writer, "EHLO nexus-relay.ferrum-mail.com\r\n").await?;
-    let _ = read_resp(&mut tls_reader).await?;
-
-    // AUTH LOGIN
-    send_cmd(&mut tls_writer, "AUTH LOGIN\r\n").await?;
-    let auth1 = read_resp(&mut tls_reader).await?;
-    if !auth1.starts_with('3') {
-        return Err(format!("AUTH LOGIN: {auth1}"));
-    }
-
-    use base64::Engine;
-    let user_b64 = base64::engine::general_purpose::STANDARD.encode(config.smtp_user.as_bytes());
-    send_cmd(&mut tls_writer, &format!("{user_b64}\r\n")).await?;
-    let auth2 = read_resp(&mut tls_reader).await?;
-    if !auth2.starts_with('3') {
-        return Err(format!("AUTH user: {auth2}"));
-    }
-
-    let pass_b64 = base64::engine::general_purpose::STANDARD.encode(config.smtp_pass.as_bytes());
-    send_cmd(&mut tls_writer, &format!("{pass_b64}\r\n")).await?;
-    let auth3 = read_resp(&mut tls_reader).await?;
-    if !auth3.starts_with('2') {
-        return Err(format!("AUTH pass: {auth3}"));
-    }
-
-    tracing::info!("Authenticated to {}", config.smtp_host);
-
-    // MAIL FROM — use the authenticated account (O365 requires envelope matches auth)
-    send_cmd(
-        &mut tls_writer,
-        &format!("MAIL FROM:<{}>\r\n", config.smtp_user),
-    )
-    .await?;
-    let r = read_resp(&mut tls_reader).await?;
+async fn send_envelope<R, W>(
+    reader: &mut R,
+    writer: &mut W,
+    from: &str,
+    recipients: &[String],
+    mime_body: &str,
+) -> Result<String, String>
+where
+    R: AsyncBufReadExt + Unpin,
+    W: AsyncWriteExt + Unpin,
+{
+    // MAIL FROM — preserve original sender
+    send_cmd(writer, &format!("MAIL FROM:<{from}>\r\n")).await?;
+    let r = read_resp(reader).await?;
     if !r.starts_with('2') {
         return Err(format!("MAIL FROM: {r}"));
     }
 
-    // RCPT TO
-    for rcpt in to {
-        send_cmd(&mut tls_writer, &format!("RCPT TO:<{rcpt}>\r\n")).await?;
-        let r = read_resp(&mut tls_reader).await?;
+    for rcpt in recipients {
+        send_cmd(writer, &format!("RCPT TO:<{rcpt}>\r\n")).await?;
+        let r = read_resp(reader).await?;
         if !r.starts_with('2') {
             return Err(format!("RCPT TO <{rcpt}>: {r}"));
         }
     }
 
-    // DATA
-    send_cmd(&mut tls_writer, "DATA\r\n").await?;
-    let r = read_resp(&mut tls_reader).await?;
+    send_cmd(writer, "DATA\r\n").await?;
+    let r = read_resp(reader).await?;
     if !r.starts_with('3') {
         return Err(format!("DATA: {r}"));
     }
 
-    // Rewrite From header to match authenticated account (O365 requires it)
-    // Add Reply-To with original sender so replies go to the right place
-    let rewritten = rewrite_from(mime_body, &config.smtp_user, from);
-    tls_writer
-        .write_all(rewritten.as_bytes())
+    timeout(DATA_TIMEOUT, writer.write_all(mime_body.as_bytes()))
         .await
+        .map_err(|_| "write body timeout".to_string())?
         .map_err(|e| format!("write body: {e}"))?;
-    send_cmd(&mut tls_writer, "\r\n.\r\n").await?;
-    let r = read_resp(&mut tls_reader).await?;
+
+    send_cmd(writer, "\r\n.\r\n").await?;
+    let r = read_resp(reader).await?;
     if !r.starts_with('2') {
         return Err(format!("message: {r}"));
     }
@@ -230,7 +385,7 @@ async fn deliver_via_submission(
         .unwrap_or("unknown")
         .to_string();
 
-    let _ = send_cmd(&mut tls_writer, "QUIT\r\n").await;
+    let _ = send_cmd(writer, "QUIT\r\n").await;
     Ok(mid)
 }
 
@@ -266,27 +421,4 @@ async fn read_resp<R: AsyncBufReadExt + Unpin>(r: &mut R) -> Result<String, Stri
     })
     .await
     .map_err(|_| "read timeout".to_string())?
-}
-
-/// Rewrite the From header in MIME to match the authenticated SMTP user.
-/// Adds Reply-To with the original sender so replies go back correctly.
-fn rewrite_from(mime: &str, smtp_user: &str, original_from: &str) -> String {
-    let mut result = String::with_capacity(mime.len() + 100);
-    let mut added_reply_to = false;
-
-    for line in mime.lines() {
-        if line.starts_with("From:") || line.starts_with("from:") {
-            // Replace From with the SMTP account
-            result.push_str(&format!("From: Ferrum Mail <{smtp_user}>\r\n"));
-            // Add Reply-To with original sender
-            if !added_reply_to {
-                result.push_str(&format!("Reply-To: {original_from}\r\n"));
-                added_reply_to = true;
-            }
-        } else {
-            result.push_str(line);
-            result.push_str("\r\n");
-        }
-    }
-    result
 }

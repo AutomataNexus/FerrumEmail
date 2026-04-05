@@ -109,24 +109,24 @@ impl DirectMxProvider {
         to: &str,
         mime_body: &str,
     ) -> Result<String, EmailError> {
-        // Try port 587 (submission) first, fall back to port 25 (SMTP)
+        // Port 25 is the standard MX delivery port — try it first, fall back to 587
         let (tcp, _addr) = {
-            let addr587 = format!("{mx_host}:587");
-            match timeout(Duration::from_secs(5), TcpStream::connect(&addr587)).await {
-                Ok(Ok(stream)) => (stream, addr587),
+            let addr25 = format!("{mx_host}:25");
+            match timeout(Duration::from_secs(5), TcpStream::connect(&addr25)).await {
+                Ok(Ok(stream)) => (stream, addr25),
                 _ => {
-                    let addr25 = format!("{mx_host}:25");
-                    let stream = timeout(CONNECT_TIMEOUT, TcpStream::connect(&addr25))
+                    let addr587 = format!("{mx_host}:587");
+                    let stream = timeout(CONNECT_TIMEOUT, TcpStream::connect(&addr587))
                         .await
                         .map_err(|_| {
                             EmailError::Provider(format!(
-                                "connection to {mx_host} timed out (tried 587 and 25)"
+                                "connection to {mx_host} timed out (tried 25 and 587)"
                             ))
                         })?
                         .map_err(|e| {
-                            EmailError::Provider(format!("connect to {addr25} failed: {e}"))
+                            EmailError::Provider(format!("connect to {addr587} failed: {e}"))
                         })?;
-                    (stream, addr25)
+                    (stream, addr587)
                 }
             }
         };
