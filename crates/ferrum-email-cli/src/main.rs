@@ -36,12 +36,20 @@ fn api_get(path: &str, token: &str) -> Result<serde_json::Value, String> {
         .send()
         .map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
-        return Err(format!("HTTP {}: {}", resp.status(), resp.text().unwrap_or_default()));
+        return Err(format!(
+            "HTTP {}: {}",
+            resp.status(),
+            resp.text().unwrap_or_default()
+        ));
     }
     resp.json().map_err(|e| e.to_string())
 }
 
-fn api_post(path: &str, token: &str, body: &serde_json::Value) -> Result<serde_json::Value, String> {
+fn api_post(
+    path: &str,
+    token: &str,
+    body: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
     let client = reqwest::blocking::Client::new();
     let resp = client
         .post(format!("{API_BASE}{path}"))
@@ -51,7 +59,11 @@ fn api_post(path: &str, token: &str, body: &serde_json::Value) -> Result<serde_j
         .send()
         .map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
-        return Err(format!("HTTP {}: {}", resp.status(), resp.text().unwrap_or_default()));
+        return Err(format!(
+            "HTTP {}: {}",
+            resp.status(),
+            resp.text().unwrap_or_default()
+        ));
     }
     resp.json().map_err(|e| e.to_string())
 }
@@ -141,8 +153,14 @@ fn cmd_whoami() {
         Ok(dash) => {
             println!("Email:       {}", dash["email"].as_str().unwrap_or("?"));
             println!("Plan:        {}", dash["plan"].as_str().unwrap_or("Free"));
-            println!("Sends:       {} total", dash["total_sends"].as_u64().unwrap_or(0));
-            println!("Today:       {} sent", dash["sends_today"].as_u64().unwrap_or(0));
+            println!(
+                "Sends:       {} total",
+                dash["total_sends"].as_u64().unwrap_or(0)
+            );
+            println!(
+                "Today:       {} sent",
+                dash["sends_today"].as_u64().unwrap_or(0)
+            );
             if let Some(quota) = dash["monthly_quota"].as_str().or(dash["quota"].as_str()) {
                 println!("Quota:       {quota}/mo");
             }
@@ -169,7 +187,11 @@ fn cmd_keys() {
                     println!(
                         "{:<20} {:<12} {}",
                         k["prefix"].as_str().unwrap_or("?"),
-                        if k["revoked"].as_bool().unwrap_or(false) { "revoked" } else { "active" },
+                        if k["revoked"].as_bool().unwrap_or(false) {
+                            "revoked"
+                        } else {
+                            "active"
+                        },
                         k["created_at"].as_str().unwrap_or("?"),
                     );
                 }
@@ -243,15 +265,25 @@ fn cmd_inbox(args: &[String]) {
                     return;
                 }
                 for msg in msgs {
-                    let unread = if msg["read"].as_bool().unwrap_or(false) { " " } else { "*" };
-                    let from = msg["from_display"].as_str()
+                    let unread = if msg["read"].as_bool().unwrap_or(false) {
+                        " "
+                    } else {
+                        "*"
+                    };
+                    let from = msg["from_display"]
+                        .as_str()
                         .or_else(|| msg["from"].as_str())
                         .unwrap_or("?");
                     let subject = msg["subject"].as_str().unwrap_or("(no subject)");
                     let id = msg["id"].as_str().unwrap_or("");
                     let date = msg["received_at"].as_str().unwrap_or("");
                     let short_date = if date.len() > 10 { &date[..10] } else { date };
-                    println!("{unread} {short_date}  {:<20}  {:<40}  {}", from, subject, &id[..8.min(id.len())]);
+                    println!(
+                        "{unread} {short_date}  {:<20}  {:<40}  {}",
+                        from,
+                        subject,
+                        &id[..8.min(id.len())]
+                    );
                 }
                 println!("\n{} messages. Use: ferrum read {folder} <id>", msgs.len());
             }
@@ -274,13 +306,22 @@ fn cmd_read(args: &[String]) {
             let meta = &detail["meta"];
             println!("Subject: {}", meta["subject"].as_str().unwrap_or("?"));
             println!("From:    {}", meta["from"].as_str().unwrap_or("?"));
-            println!("To:      {}", meta["to"].as_array()
-                .map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", "))
-                .unwrap_or_default());
+            println!(
+                "To:      {}",
+                meta["to"]
+                    .as_array()
+                    .map(|a| a
+                        .iter()
+                        .filter_map(|v| v.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", "))
+                    .unwrap_or_default()
+            );
             println!("Date:    {}", meta["date"].as_str().unwrap_or("?"));
             println!("{}", "-".repeat(60));
 
-            let body = detail["text_body"].as_str()
+            let body = detail["text_body"]
+                .as_str()
                 .or_else(|| detail["html_body"].as_str())
                 .unwrap_or("(empty)");
 
@@ -311,7 +352,9 @@ fn cmd_read(args: &[String]) {
 fn cmd_send(args: &[String]) {
     if args.len() < 5 {
         eprintln!("Usage: ferrum send <to> <subject> <body>");
-        eprintln!("  Example: ferrum send user@example.com \"Welcome\" \"Hello, welcome to our app!\"");
+        eprintln!(
+            "  Example: ferrum send user@example.com \"Welcome\" \"Hello, welcome to our app!\""
+        );
         std::process::exit(1);
     }
     let to = &args[2];
@@ -324,12 +367,16 @@ fn cmd_send(args: &[String]) {
         body.replace('\n', "<br>")
     );
 
-    match api_post("/emails", &token, &serde_json::json!({
-        "to": to,
-        "subject": subject,
-        "html": html,
-        "text": body,
-    })) {
+    match api_post(
+        "/emails",
+        &token,
+        &serde_json::json!({
+            "to": to,
+            "subject": subject,
+            "html": html,
+            "text": body,
+        }),
+    ) {
         Ok(resp) => {
             let mid = resp["message_id"].as_str().unwrap_or("sent");
             println!("Sent to {to} (ID: {mid})");
@@ -342,8 +389,14 @@ fn cmd_send(args: &[String]) {
 }
 
 fn fmt_bytes(b: u64) -> String {
-    if b < 1024 { return format!("{b}B"); }
-    if b < 1048576 { return format!("{:.1}KB", b as f64 / 1024.0); }
-    if b < 1073741824 { return format!("{:.1}MB", b as f64 / 1048576.0); }
+    if b < 1024 {
+        return format!("{b}B");
+    }
+    if b < 1048576 {
+        return format!("{:.1}KB", b as f64 / 1024.0);
+    }
+    if b < 1073741824 {
+        return format!("{:.1}MB", b as f64 / 1048576.0);
+    }
     format!("{:.2}GB", b as f64 / 1073741824.0)
 }

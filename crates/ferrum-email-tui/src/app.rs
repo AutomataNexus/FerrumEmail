@@ -4,8 +4,8 @@
 use crate::auth::{SaasClient, Session};
 use crate::templates;
 use ferrum_email_render::Renderer;
-use ferrum_email_send::providers::SmtpProvider;
 use ferrum_email_send::Sender;
+use ferrum_email_send::providers::SmtpProvider;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Tab {
@@ -95,9 +95,7 @@ pub struct DashboardStats {
 }
 
 impl App {
-    pub async fn new_with_session(
-        session: &Session,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new_with_session(session: &Session) -> Result<Self, Box<dyn std::error::Error>> {
         let client = SaasClient::new(&session.token);
         let (smtp_host, smtp_port, smtp_user, smtp_pass) =
             crate::auth::smtp_config_for_session(session);
@@ -213,7 +211,10 @@ impl App {
                     success: true,
                 });
                 self.message = Some((
-                    format!("Sent \"{}\" to {} (ID: {mid})", template_meta.name, self.session.email),
+                    format!(
+                        "Sent \"{}\" to {} (ID: {mid})",
+                        template_meta.name, self.session.email
+                    ),
                     false,
                 ));
             }
@@ -232,30 +233,36 @@ impl App {
                 emails_sent: dash["total_sends"].as_u64().unwrap_or(0),
                 emails_today: dash["sends_today"].as_u64().unwrap_or(0),
                 plan: dash["plan"].as_str().unwrap_or("Free").to_string(),
-                quota: dash["quota"].as_str()
+                quota: dash["quota"]
+                    .as_str()
                     .or_else(|| dash["monthly_quota"].as_str())
-                    .unwrap_or("—").to_string(),
+                    .unwrap_or("—")
+                    .to_string(),
             };
         }
 
         // Fetch API keys
         if let Ok(keys) = self.client.list_keys() {
-            self.api_keys = keys.iter()
+            self.api_keys = keys
+                .iter()
                 .filter_map(|k| k["prefix"].as_str().map(|p| format!("{}...", p)))
                 .collect();
         }
 
         // Fetch send history
         if let Ok(sends) = self.client.send_history() {
-            self.send_history = sends.iter().filter_map(|s| {
-                Some(SendRecord {
-                    template: s["subject"].as_str().unwrap_or("email").to_string(),
-                    to: s["to"].as_str().unwrap_or("?").to_string(),
-                    message_id: s["message_id"].as_str().unwrap_or("?").to_string(),
-                    timestamp: s["sent_at"].as_str().unwrap_or("").to_string(),
-                    success: s["status"].as_str() == Some("sent"),
+            self.send_history = sends
+                .iter()
+                .filter_map(|s| {
+                    Some(SendRecord {
+                        template: s["subject"].as_str().unwrap_or("email").to_string(),
+                        to: s["to"].as_str().unwrap_or("?").to_string(),
+                        message_id: s["message_id"].as_str().unwrap_or("?").to_string(),
+                        timestamp: s["sent_at"].as_str().unwrap_or("").to_string(),
+                        success: s["status"].as_str() == Some("sent"),
+                    })
                 })
-            }).collect();
+                .collect();
         }
 
         self.message = Some(("Refreshed".to_string(), false));
@@ -310,9 +317,15 @@ impl App {
 
     pub fn compose_backspace(&mut self) {
         match self.compose_field {
-            ComposeField::To => { self.compose_to.pop(); }
-            ComposeField::Subject => { self.compose_subject.pop(); }
-            ComposeField::Body => { self.compose_body.pop(); }
+            ComposeField::To => {
+                self.compose_to.pop();
+            }
+            ComposeField::Subject => {
+                self.compose_subject.pop();
+            }
+            ComposeField::Body => {
+                self.compose_body.pop();
+            }
         }
     }
 

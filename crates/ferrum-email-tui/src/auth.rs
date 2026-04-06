@@ -169,7 +169,8 @@ impl SaasClient {
     }
 
     fn get(&self, path: &str) -> Result<serde_json::Value, String> {
-        let resp = self.client
+        let resp = self
+            .client
             .get(format!("{API_BASE}{path}"))
             .header("Authorization", format!("Bearer {}", self.token))
             .send()
@@ -181,7 +182,8 @@ impl SaasClient {
     }
 
     fn post(&self, path: &str, body: &serde_json::Value) -> Result<serde_json::Value, String> {
-        let resp = self.client
+        let resp = self
+            .client
             .post(format!("{API_BASE}{path}"))
             .header("Authorization", format!("Bearer {}", self.token))
             .json(body)

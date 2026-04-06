@@ -106,11 +106,22 @@ fn draw_dashboard(f: &mut Frame, app: &App, area: Rect) {
         ]),
         Line::from(vec![
             Span::styled("  Plan:    ", theme::label()),
-            Span::styled(&app.dashboard_stats.plan, Style::default().fg(theme::TERRACOTTA).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                &app.dashboard_stats.plan,
+                Style::default()
+                    .fg(theme::TERRACOTTA)
+                    .add_modifier(Modifier::BOLD),
+            ),
         ]),
         Line::from(vec![
             Span::styled("  Sent:    ", theme::label()),
-            Span::styled(format!("{} total, {} today", app.dashboard_stats.emails_sent, app.dashboard_stats.emails_today), theme::text_normal()),
+            Span::styled(
+                format!(
+                    "{} total, {} today",
+                    app.dashboard_stats.emails_sent, app.dashboard_stats.emails_today
+                ),
+                theme::text_normal(),
+            ),
         ]),
         Line::from(vec![
             Span::styled("  Quota:   ", theme::label()),
@@ -127,11 +138,21 @@ fn draw_dashboard(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(stats, chunks[0]);
 
     // API Keys
-    let key_items: Vec<ListItem> = app.api_keys.iter()
-        .map(|k| ListItem::new(Line::from(Span::styled(format!("  {k}"), theme::text_normal()))))
+    let key_items: Vec<ListItem> = app
+        .api_keys
+        .iter()
+        .map(|k| {
+            ListItem::new(Line::from(Span::styled(
+                format!("  {k}"),
+                theme::text_normal(),
+            )))
+        })
         .collect();
     let key_list = if key_items.is_empty() {
-        List::new(vec![ListItem::new(Line::from(Span::styled("  No API keys — create one at ferrum-mail.com/dashboard/keys", theme::text_dim())))])
+        List::new(vec![ListItem::new(Line::from(Span::styled(
+            "  No API keys — create one at ferrum-mail.com/dashboard/keys",
+            theme::text_dim(),
+        )))])
     } else {
         List::new(key_items)
     };
@@ -149,7 +170,10 @@ fn draw_send_history_tab(f: &mut Frame, app: &App, area: Rect) {
     if app.send_history.is_empty() {
         let empty = Paragraph::new(vec![
             Line::from(""),
-            Line::from(Span::styled("  No emails sent yet. Go to Compose or Templates to send.", theme::text_dim())),
+            Line::from(Span::styled(
+                "  No emails sent yet. Go to Compose or Templates to send.",
+                theme::text_dim(),
+            )),
         ])
         .block(
             Block::default()
@@ -162,17 +186,26 @@ fn draw_send_history_tab(f: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
-    let items: Vec<ListItem> = app.send_history.iter().rev().map(|r| {
-        let status_style = if r.success { theme::status_ok() } else { theme::status_err() };
-        let icon = if r.success { "OK" } else { "FAIL" };
-        ListItem::new(Line::from(vec![
-            Span::styled(format!("  [{icon}] "), status_style),
-            Span::styled(&r.template, theme::text_normal()),
-            Span::styled(" -> ", theme::text_dim()),
-            Span::styled(&r.to, theme::text_muted()),
-            Span::styled(format!("  ({})", r.message_id), theme::text_dim()),
-        ]))
-    }).collect();
+    let items: Vec<ListItem> = app
+        .send_history
+        .iter()
+        .rev()
+        .map(|r| {
+            let status_style = if r.success {
+                theme::status_ok()
+            } else {
+                theme::status_err()
+            };
+            let icon = if r.success { "OK" } else { "FAIL" };
+            ListItem::new(Line::from(vec![
+                Span::styled(format!("  [{icon}] "), status_style),
+                Span::styled(&r.template, theme::text_normal()),
+                Span::styled(" -> ", theme::text_dim()),
+                Span::styled(&r.to, theme::text_muted()),
+                Span::styled(format!("  ({})", r.message_id), theme::text_dim()),
+            ]))
+        })
+        .collect();
 
     let list = List::new(items).block(
         Block::default()
@@ -304,7 +337,6 @@ fn draw_preview(f: &mut Frame, app: &App, area: Rect) {
     );
     f.render_widget(text_view, chunks[1]);
 }
-
 
 fn draw_compose(f: &mut Frame, app: &App, area: Rect) {
     let is_editing = app.mode == Mode::Compose;
