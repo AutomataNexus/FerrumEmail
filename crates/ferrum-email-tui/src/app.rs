@@ -1,22 +1,8 @@
 //! Application state for the Ferrum Email TUI.
 
-use std::path::PathBuf;
-use std::sync::Arc;
-
-use aegis_db_vault::{AegisVault, VaultConfig};
-use ferrum_email_render::Renderer;
-use ferrum_email_send::Sender;
-use ferrum_email_send::providers::SmtpProvider;
-use ferrum_email_send::vault::VaultCredentialStore;
-
+use crate::auth::{MailboxClient, Session};
 use crate::templates;
-
-const VAULT_DIR: &str = "/var/lib/ferrum-email/vault";
-
-fn vault_passphrase() -> String {
-    std::env::var("FERRUM_VAULT_PASSPHRASE")
-        .unwrap_or_else(|_| "ferrum-email-vault-key".to_string())
-}
+use ferrum_email_render::Renderer;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Tab {
@@ -25,8 +11,6 @@ pub enum Tab {
     Outbox,
     Templates,
     Preview,
-    Vault,
-    Send,
 }
 
 impl Tab {
@@ -36,8 +20,6 @@ impl Tab {
         Tab::Outbox,
         Tab::Templates,
         Tab::Preview,
-        Tab::Vault,
-        Tab::Send,
     ];
 
     pub fn label(&self) -> &'static str {
@@ -47,8 +29,6 @@ impl Tab {
             Tab::Outbox => " Outbox ",
             Tab::Templates => " Templates ",
             Tab::Preview => " Preview ",
-            Tab::Vault => " Vault ",
-            Tab::Send => " Send ",
         }
     }
 }
@@ -59,6 +39,7 @@ pub enum Mode {
     Preview,
     Sending,
     Compose,
+    Reading,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -70,40 +51,15 @@ pub enum ComposeField {
 
 #[derive(Clone)]
 pub struct MailItem {
+    pub id: String,
+    pub folder: String,
     pub from: String,
     pub to: String,
     pub subject: String,
     pub timestamp: String,
     pub status: String,
     pub preview: String,
-}
-
-pub struct App {
-    pub tab: Tab,
-    pub tab_index: usize,
-    pub mode: Mode,
-    pub selected_template: usize,
-    pub preview_html: String,
-    pub preview_text: String,
-    pub preview_scroll: u16,
-    pub message: Option<(String, bool)>, // (text, is_error)
-    pub compose_to: String,
-    pub compose_subject: String,
-    pub compose_body: String,
-    pub compose_field: ComposeField,
-    pub inbox: Vec<MailItem>,
-    pub outbox: Vec<MailItem>,
-    pub vault_keys: Vec<String>,
-    pub vault_status: String,
-    pub send_to: String,
-    pub send_history: Vec<SendRecord>,
-    pub renderer: Renderer,
-    store: VaultCredentialStore,
-    smtp_host: String,
-    smtp_port: u16,
-    smtp_user: String,
-    smtp_pass: String,
-    from: ferrum_email_send::Mailbox,
+    pub read: bool,
 }
 
 #[derive(Clone)]
@@ -116,137 +72,68 @@ pub struct SendRecord {
     pub success: bool,
 }
 
+pub struct App {
+    pub tab: Tab,
+    pub tab_index: usize,
+    pub mode: Mode,
+    pub selected_template: usize,
+    pub selected_inbox: usize,
+    pub preview_html: String,
+    pub preview_text: String,
+    pub preview_scroll: u16,
+    pub message: Option<(String, bool)>,
+    pub compose_to: String,
+    pub compose_subject: String,
+    pub compose_body: String,
+    pub compose_field: ComposeField,
+    pub inbox: Vec<MailItem>,
+    pub outbox: Vec<MailItem>,
+    pub send_history: Vec<SendRecord>,
+    pub reading_body: String,
+    pub reading_subject: String,
+    pub renderer: Renderer,
+    pub session: Session,
+    client: MailboxClient,
+}
+
 impl App {
-    /// Create app with SaaS session credentials (primary flow).
     pub async fn new_with_session(
-        session: &crate::auth::Session,
+        session: &Session,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let (smtp_host, smtp_port, smtp_user, smtp_pass) =
-            crate::auth::smtp_config_for_session(session);
-        let from = ferrum_email_send::Mailbox::address(&session.email);
-
-        // Initialize vault for local credential caching
-        let config = VaultConfig {
-            data_dir: Some(PathBuf::from(VAULT_DIR)),
-            auto_unseal: true,
-            passphrase: Some(vault_passphrase()),
-            ..Default::default()
-        };
-        let vault = AegisVault::init(config).await?;
-        let vault = Arc::new(vault);
-        let store = VaultCredentialStore::new(vault.clone());
-        let vault_keys = store.list_keys().unwrap_or_default();
-
-        let vault_status = format!("Logged in as {}", session.email);
+        let client = MailboxClient::new(&session.token);
         let renderer = Renderer::default();
 
         let component = templates::render_template(0, &session.email);
         let preview_html = renderer.render_html(component.as_ref()).unwrap_or_default();
         let preview_text = renderer.render_text(component.as_ref()).unwrap_or_default();
 
-        Ok(App {
+        let mut app = App {
             tab: Tab::Inbox,
             tab_index: 0,
             mode: Mode::Normal,
             selected_template: 0,
+            selected_inbox: 0,
             preview_html,
             preview_text,
             preview_scroll: 0,
             message: None,
-            compose_to: session.email.clone(),
+            compose_to: String::new(),
             compose_subject: String::new(),
             compose_body: String::new(),
             compose_field: ComposeField::To,
-            inbox: vec![MailItem {
-                from: "system@ferrum-mail.com".into(),
-                to: session.email.clone(),
-                subject: "Welcome to Ferrum Mail".into(),
-                timestamp: "just now".into(),
-                status: "unread".into(),
-                preview: "Your account is ready. Start sending emails with the TUI.".into(),
-            }],
+            inbox: Vec::new(),
             outbox: Vec::new(),
-            vault_keys,
-            vault_status,
-            send_to: session.email.clone(),
             send_history: Vec::new(),
+            reading_body: String::new(),
+            reading_subject: String::new(),
             renderer,
-            store,
-            smtp_host,
-            smtp_port,
-            smtp_user,
-            smtp_pass,
-            from,
-        })
-    }
-
-    /// Create app with local vault credentials (fallback for self-hosted).
-    #[allow(dead_code)]
-    pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let config = VaultConfig {
-            data_dir: Some(PathBuf::from(VAULT_DIR)),
-            auto_unseal: true,
-            passphrase: Some(vault_passphrase()),
-            ..Default::default()
-        };
-        let vault = AegisVault::init(config).await?;
-        let vault = Arc::new(vault);
-        let store = VaultCredentialStore::new(vault.clone());
-
-        let smtp_user = store.get_smtp_username().unwrap_or_default();
-        let smtp_pass = store.get_smtp_password().unwrap_or_default();
-        let smtp_host = store.get_smtp_host().unwrap_or_default();
-        let smtp_port = store.get_smtp_port().unwrap_or(587);
-        let from = store
-            .get_default_from()
-            .unwrap_or_else(|_| ferrum_email_send::Mailbox::address("noreply@example.com"));
-        let vault_keys = store.list_keys().unwrap_or_default();
-
-        let vault_status = if vault.is_sealed() {
-            "Sealed".to_string()
-        } else {
-            format!("Unsealed ({} keys)", vault_keys.len())
+            session: session.clone(),
+            client,
         };
 
-        let renderer = Renderer::default();
-        let component = templates::render_template(0, &smtp_user);
-        let preview_html = renderer.render_html(component.as_ref()).unwrap_or_default();
-        let preview_text = renderer.render_text(component.as_ref()).unwrap_or_default();
-
-        Ok(App {
-            tab: Tab::Inbox,
-            tab_index: 0,
-            mode: Mode::Normal,
-            selected_template: 0,
-            preview_html,
-            preview_text,
-            preview_scroll: 0,
-            message: None,
-            compose_to: smtp_user.clone(),
-            compose_subject: String::new(),
-            compose_body: String::new(),
-            compose_field: ComposeField::To,
-            inbox: vec![MailItem {
-                from: "system@ferrum-mail.com".into(),
-                to: smtp_user.clone(),
-                subject: "Welcome to Ferrum Mail".into(),
-                timestamp: "just now".into(),
-                status: "unread".into(),
-                preview: "Your account is ready. Start sending emails with your API key.".into(),
-            }],
-            outbox: Vec::new(),
-            vault_keys,
-            vault_status,
-            send_to: smtp_user.clone(),
-            send_history: Vec::new(),
-            renderer,
-            store,
-            smtp_host,
-            smtp_port,
-            smtp_user,
-            smtp_pass,
-            from,
-        })
+        // Load inbox
+        let _ = app.refresh().await;
+        Ok(app)
     }
 
     pub fn next_tab(&mut self) {
@@ -264,28 +151,90 @@ impl App {
     }
 
     pub fn next_item(&mut self) {
-        if self.tab == Tab::Templates {
-            self.selected_template = (self.selected_template + 1) % templates::TEMPLATES.len();
+        match self.tab {
+            Tab::Templates => {
+                self.selected_template = (self.selected_template + 1) % templates::TEMPLATES.len();
+            }
+            Tab::Inbox => {
+                if !self.inbox.is_empty() {
+                    self.selected_inbox = (self.selected_inbox + 1) % self.inbox.len();
+                }
+            }
+            _ => {}
         }
     }
 
     pub fn prev_item(&mut self) {
-        if self.tab == Tab::Templates {
-            self.selected_template = if self.selected_template == 0 {
-                templates::TEMPLATES.len() - 1
-            } else {
-                self.selected_template - 1
-            };
+        match self.tab {
+            Tab::Templates => {
+                self.selected_template = if self.selected_template == 0 {
+                    templates::TEMPLATES.len() - 1
+                } else {
+                    self.selected_template - 1
+                };
+            }
+            Tab::Inbox => {
+                if !self.inbox.is_empty() {
+                    self.selected_inbox = if self.selected_inbox == 0 {
+                        self.inbox.len() - 1
+                    } else {
+                        self.selected_inbox - 1
+                    };
+                }
+            }
+            _ => {}
         }
     }
 
     pub async fn select_item(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.preview_selected();
+        match self.tab {
+            Tab::Inbox => {
+                if let Some(msg) = self.inbox.get(self.selected_inbox) {
+                    let folder = msg.folder.clone();
+                    let id = msg.id.clone();
+                    match self.client.get_message(&folder, &id) {
+                        Ok(detail) => {
+                            self.reading_subject = detail["meta"]["subject"]
+                                .as_str().unwrap_or("").to_string();
+                            self.reading_body = detail["text_body"]
+                                .as_str()
+                                .or_else(|| detail["html_body"].as_str())
+                                .unwrap_or("(empty)")
+                                .to_string();
+                            // Strip HTML tags for display
+                            if self.reading_body.contains('<') {
+                                self.reading_body = self.reading_body
+                                    .replace("<br>", "\n").replace("<br/>", "\n")
+                                    .replace("</p>", "\n\n").replace("</div>", "\n");
+                                let mut clean = String::new();
+                                let mut in_tag = false;
+                                for ch in self.reading_body.chars() {
+                                    match ch {
+                                        '<' => in_tag = true,
+                                        '>' => { in_tag = false; }
+                                        _ if !in_tag => clean.push(ch),
+                                        _ => {}
+                                    }
+                                }
+                                self.reading_body = clean.trim().to_string();
+                            }
+                            self.preview_scroll = 0;
+                            self.mode = Mode::Reading;
+                        }
+                        Err(e) => self.message = Some((format!("Failed: {e}"), true)),
+                    }
+                }
+            }
+            Tab::Templates => {
+                self.preview_selected();
+            }
+            _ => {}
+        }
         Ok(())
     }
 
     pub fn preview_selected(&mut self) {
-        let component = templates::render_template(self.selected_template, &self.send_to);
+        let component = templates::render_template(self.selected_template, &self.session.email);
         self.preview_html = self
             .renderer
             .render_html(component.as_ref())
@@ -301,56 +250,38 @@ impl App {
     pub async fn send_selected(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.mode = Mode::Sending;
         let template_meta = &templates::TEMPLATES[self.selected_template];
-        let component = templates::render_template(self.selected_template, &self.send_to);
+        let component = templates::render_template(self.selected_template, &self.session.email);
 
-        let provider = SmtpProvider::builder()
-            .host(&self.smtp_host)
-            .port(self.smtp_port)
-            .credentials(&self.smtp_user, &self.smtp_pass)
-            .auth_login()
-            .build()?;
-
-        let sender = Sender::new(provider, self.from.clone());
-
-        // Build the message manually since we have a dyn Component
         let html = self.renderer.render_html(component.as_ref())?;
         let text = self.renderer.render_text(component.as_ref()).ok();
         let subject = component.subject().unwrap_or("(no subject)").to_string();
 
-        let message = ferrum_email_send::EmailMessage {
-            from: self.from.clone(),
-            to: vec![self.send_to.as_str().into()],
-            subject,
-            html,
-            text,
-            ..Default::default()
-        };
-
-        match sender.send_message(message).await {
-            Ok(result) => {
-                let record = SendRecord {
+        match self.client.send_email(
+            &[self.session.email.clone()],
+            &subject,
+            &html,
+            text.as_deref(),
+        ) {
+            Ok(mid) => {
+                self.send_history.push(SendRecord {
                     template: template_meta.name.to_string(),
-                    to: self.send_to.clone(),
-                    message_id: result.message_id.clone(),
-                    timestamp: template_meta.subject.to_string(),
+                    to: self.session.email.clone(),
+                    message_id: mid.clone(),
+                    timestamp: "just now".into(),
                     success: true,
-                };
-                self.send_history.push(record);
+                });
                 self.outbox.push(MailItem {
-                    from: self.from.to_string(),
-                    to: self.send_to.clone(),
+                    id: mid.clone(),
+                    folder: "sent".into(),
+                    from: self.session.email.clone(),
+                    to: self.session.email.clone(),
                     subject: template_meta.subject.to_string(),
                     timestamp: "just now".into(),
                     status: "sent".into(),
                     preview: format!("Template: {}", template_meta.name),
+                    read: true,
                 });
-                self.message = Some((
-                    format!(
-                        "Sent \"{}\" to {} (ID: {})",
-                        template_meta.name, self.send_to, result.message_id
-                    ),
-                    false,
-                ));
+                self.message = Some((format!("Sent (ID: {mid})"), false));
             }
             Err(e) => {
                 self.message = Some((format!("Send failed: {e}"), true));
@@ -361,14 +292,63 @@ impl App {
     }
 
     pub async fn refresh(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.vault_keys = self.store.list_keys().unwrap_or_default();
-        self.message = Some(("Refreshed".to_string(), false));
+        // Fetch inbox
+        match self.client.list_messages("inbox") {
+            Ok(messages) => {
+                self.inbox = messages.iter().filter_map(|m| {
+                    Some(MailItem {
+                        id: m["id"].as_str()?.to_string(),
+                        folder: m["folder"].as_str().unwrap_or("inbox").to_string(),
+                        from: m["from_display"].as_str()
+                            .or_else(|| m["from"].as_str())
+                            .unwrap_or("unknown").to_string(),
+                        to: m["to"].as_array()
+                            .and_then(|a| a.first())
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("").to_string(),
+                        subject: m["subject"].as_str().unwrap_or("(no subject)").to_string(),
+                        timestamp: m["received_at"].as_str().unwrap_or("").to_string(),
+                        status: if m["read"].as_bool().unwrap_or(false) { "read" } else { "unread" }.into(),
+                        preview: m["preview"].as_str().unwrap_or("").to_string(),
+                        read: m["read"].as_bool().unwrap_or(false),
+                    })
+                }).collect();
+            }
+            Err(e) => {
+                self.message = Some((format!("Inbox fetch failed: {e}"), true));
+            }
+        }
+
+        // Fetch sent
+        match self.client.list_messages("sent") {
+            Ok(messages) => {
+                self.outbox = messages.iter().filter_map(|m| {
+                    Some(MailItem {
+                        id: m["id"].as_str()?.to_string(),
+                        folder: "sent".into(),
+                        from: self.session.email.clone(),
+                        to: m["to"].as_array()
+                            .and_then(|a| a.first())
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("").to_string(),
+                        subject: m["subject"].as_str().unwrap_or("(no subject)").to_string(),
+                        timestamp: m["received_at"].as_str().unwrap_or("").to_string(),
+                        status: "sent".into(),
+                        preview: m["preview"].as_str().unwrap_or("").to_string(),
+                        read: true,
+                    })
+                }).collect();
+            }
+            Err(_) => {}
+        }
+
+        self.message = Some((format!("{} messages", self.inbox.len()), false));
         Ok(())
     }
 
     pub fn dismiss_message(&mut self) {
         self.message = None;
-        if self.mode == Mode::Preview {
+        if self.mode == Mode::Preview || self.mode == Mode::Reading {
             self.mode = Mode::Normal;
         }
     }
@@ -414,15 +394,9 @@ impl App {
 
     pub fn compose_backspace(&mut self) {
         match self.compose_field {
-            ComposeField::To => {
-                self.compose_to.pop();
-            }
-            ComposeField::Subject => {
-                self.compose_subject.pop();
-            }
-            ComposeField::Body => {
-                self.compose_body.pop();
-            }
+            ComposeField::To => { self.compose_to.pop(); }
+            ComposeField::Subject => { self.compose_subject.pop(); }
+            ComposeField::Body => { self.compose_body.pop(); }
         }
     }
 
@@ -440,51 +414,31 @@ impl App {
 
         self.mode = Mode::Sending;
 
-        // Build a simple HTML email from the compose fields
-        let html_body = compose_to_html(&self.compose_subject, &self.compose_body);
-        let text_body = self.compose_body.clone();
+        let html = format!(
+            "<div style=\"font-family:-apple-system,sans-serif;color:#2D2A26;font-size:15px;line-height:1.6\">{}</div>",
+            self.compose_body.replace('\n', "<br>")
+        );
 
-        let message = ferrum_email_send::EmailMessage {
-            from: self.from.clone(),
-            to: vec![self.compose_to.as_str().into()],
-            subject: self.compose_subject.clone(),
-            html: html_body,
-            text: Some(text_body),
-            ..Default::default()
-        };
+        let recipients: Vec<String> = self.compose_to
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
 
-        let provider = SmtpProvider::builder()
-            .host(&self.smtp_host)
-            .port(self.smtp_port)
-            .credentials(&self.smtp_user, &self.smtp_pass)
-            .auth_login()
-            .build()?;
-
-        let sender = Sender::new(provider, self.from.clone());
-
-        match sender.send_message(message).await {
-            Ok(result) => {
-                let record = SendRecord {
-                    template: "Composed".to_string(),
-                    to: self.compose_to.clone(),
-                    message_id: result.message_id.clone(),
-                    timestamp: self.compose_subject.clone(),
-                    success: true,
-                };
-                self.send_history.push(record);
+        match self.client.send_email(&recipients, &self.compose_subject, &html, Some(&self.compose_body)) {
+            Ok(mid) => {
                 self.outbox.push(MailItem {
-                    from: self.from.to_string(),
+                    id: mid.clone(),
+                    folder: "sent".into(),
+                    from: self.session.email.clone(),
                     to: self.compose_to.clone(),
                     subject: self.compose_subject.clone(),
                     timestamp: "just now".into(),
                     status: "sent".into(),
                     preview: self.compose_body.chars().take(80).collect(),
+                    read: true,
                 });
-                self.message = Some((
-                    format!("Sent to {} (ID: {})", self.compose_to, result.message_id),
-                    false,
-                ));
-                // Clear compose fields after success
+                self.message = Some((format!("Sent to {} (ID: {mid})", self.compose_to), false));
                 self.compose_subject.clear();
                 self.compose_body.clear();
             }
@@ -495,84 +449,16 @@ impl App {
         self.mode = Mode::Normal;
         Ok(())
     }
-}
 
-/// Convert compose text to branded HTML email.
-fn compose_to_html(subject: &str, body: &str) -> String {
-    use ferrum_email_components::*;
-
-    const FERRUM_LOGO: &str = "https://raw.githubusercontent.com/AutomataNexus/FerrumEmail/master/assets/FerrumEmail_logo.PNG";
-    const NEXUS_LOGO: &str = "https://raw.githubusercontent.com/AutomataNexus/FerrumEmail/master/assets/AutomataNexus_Logo.PNG";
-
-    let body_paragraphs: Vec<Node> = body
-        .split('\n')
-        .filter(|l| !l.is_empty())
-        .map(|line| {
-            Text::new(line)
-                .color(Color::hex("4A4540"))
-                .font_size(Px(15))
-                .line_height(1.6)
-                .into_node()
-        })
-        .collect();
-
-    let mut section = Section::new()
-        .padding(Spacing::new(Px(0), Px(40), Px(32), Px(40)))
-        .background(Color::hex("FFFEFA"))
-        .child_node(
-            Heading::h2(subject)
-                .color(Color::hex("2D2A26"))
-                .margin(Spacing::new(Px(0), Px(0), Px(16), Px(0)))
-                .into_node(),
-        );
-
-    for p in body_paragraphs {
-        section = section.child_node(p);
+    /// Delete selected inbox message (move to trash).
+    pub fn delete_selected(&mut self) {
+        if let Some(msg) = self.inbox.get(self.selected_inbox) {
+            let _ = self.client.move_message(&msg.folder, &msg.id, "trash");
+            self.inbox.remove(self.selected_inbox);
+            if self.selected_inbox >= self.inbox.len() && self.selected_inbox > 0 {
+                self.selected_inbox -= 1;
+            }
+            self.message = Some(("Moved to trash".to_string(), false));
+        }
     }
-
-    let footer = Section::new()
-        .padding(Spacing::new(Px(28), Px(40), Px(32), Px(40)))
-        .background(Color::hex("FAF8F5"))
-        .text_align(TextAlign::Center)
-        .child_node(Image::new(NEXUS_LOGO, "AutomataNexus", Px(140)).into_node())
-        .child_node(Spacer::new(Px(14)).into_node())
-        .child_node(
-            Text::new("Secured by NexusVault")
-                .color(Color::hex("8B6F5E"))
-                .font_size(Px(13))
-                .font_weight(FontWeight::SemiBold)
-                .text_align(TextAlign::Center)
-                .margin(Spacing::new(Px(0), Px(0), Px(4), Px(0)))
-                .into_node(),
-        )
-        .child_node(Hr::new().color(Color::hex("E8DDD4")).into_node())
-        .child_node(Spacer::new(Px(12)).into_node())
-        .child_node(
-            Text::new("\u{00A9} 2026 AutomataNexus LLC. All rights reserved.")
-                .color(Color::hex("A8998C"))
-                .font_size(Px(11))
-                .text_align(TextAlign::Center)
-                .into_node(),
-        );
-
-    let email = Html::new().child(Head::new().title(subject)).child(
-        Body::new().background(Color::hex("FAFAF8")).child(
-            Container::new()
-                .max_width(Px(600))
-                .padding(Spacing::xy(Px(20), Px(0)))
-                .child_node(
-                    Section::new()
-                        .padding(Spacing::new(Px(40), Px(40), Px(20), Px(40)))
-                        .background(Color::hex("FFFEFA"))
-                        .text_align(TextAlign::Center)
-                        .child_node(Image::new(FERRUM_LOGO, "Ferrum Email", Px(280)).into_node())
-                        .into_node(),
-                )
-                .child_node(section.into_node())
-                .child_node(footer.into_node()),
-        ),
-    );
-
-    let renderer = ferrum_email_render::Renderer::default();
-    renderer.render_html(&email).unwrap_or_default()
 }

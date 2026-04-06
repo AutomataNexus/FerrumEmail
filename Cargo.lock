@@ -602,6 +602,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ferrum-email-cli"
+version = "0.1.4"
+dependencies = [
+ "dirs",
+ "reqwest",
+ "serde_json",
+]
+
+[[package]]
 name = "ferrum-email-components"
 version = "0.1.4"
 dependencies = [
@@ -641,7 +650,6 @@ dependencies = [
 name = "ferrum-email-tui"
 version = "0.1.4"
 dependencies = [
- "aegis-db-vault",
  "crossterm",
  "dirs",
  "ferrum-email-components",

@@ -18,8 +18,7 @@ path = "src/main.rs"
 ferrum-email-core.workspace = true
 ferrum-email-components.workspace = true
 ferrum-email-render.workspace = true
-ferrum-email-send = { workspace = true, features = ["smtp", "vault"] }
-aegis-db-vault = "0.2.3"
+ferrum-email-send.workspace = true
 ratatui = "0.29"
 crossterm = "0.28"
 tokio = { version = "1", features = ["full"] }

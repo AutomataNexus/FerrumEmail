@@ -81,16 +81,32 @@ fn draw_main(f: &mut Frame, app: &App, area: Rect) {
     match app.mode {
         Mode::Preview => draw_preview(f, app, area),
         Mode::Compose => draw_compose(f, app, area),
+        Mode::Reading => draw_reading(f, app, area),
         _ => match app.tab {
             Tab::Inbox => draw_mailbox(f, app, area, "Inbox", &app.inbox),
             Tab::Compose => draw_compose(f, app, area),
             Tab::Outbox => draw_mailbox(f, app, area, "Outbox", &app.outbox),
             Tab::Templates => draw_templates(f, app, area),
             Tab::Preview => draw_preview(f, app, area),
-            Tab::Vault => draw_vault(f, app, area),
-            Tab::Send => draw_send_history(f, app, area),
         },
     }
+}
+
+fn draw_reading(f: &mut Frame, app: &App, area: Rect) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme::BORDER))
+        .title(format!(" {} ", app.reading_subject))
+        .title_style(Style::default().fg(theme::TERRACOTTA).bold());
+
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let text = Paragraph::new(app.reading_body.as_str())
+        .style(Style::default().fg(theme::TEXT))
+        .wrap(Wrap { trim: false })
+        .scroll((app.preview_scroll, 0));
+    f.render_widget(text, inner);
 }
 
 fn draw_templates(f: &mut Frame, app: &App, area: Rect) {
@@ -152,7 +168,7 @@ fn draw_templates(f: &mut Frame, app: &App, area: Rect) {
         Line::from(""),
         Line::from(vec![
             Span::styled("  Send to:  ", theme::label()),
-            Span::styled(&app.send_to, theme::text_normal()),
+            Span::styled(&app.session.email, theme::text_normal()),
         ]),
         Line::from(""),
         Line::from(""),
@@ -416,112 +432,6 @@ fn draw_compose(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(help, chunks[3]);
 }
 
-fn draw_vault(f: &mut Frame, app: &App, area: Rect) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(5), Constraint::Min(5)])
-        .split(area);
-
-    // Vault status
-    let status = Paragraph::new(vec![
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("  Status:  ", theme::label()),
-            Span::styled(&app.vault_status, theme::status_ok()),
-        ]),
-        Line::from(vec![
-            Span::styled("  Path:    ", theme::label()),
-            Span::styled("/var/lib/ferrum-email/vault", theme::text_muted()),
-        ]),
-    ])
-    .block(
-        Block::default()
-            .title(Span::styled(" NexusVault ", theme::label()))
-            .borders(Borders::ALL)
-            .border_style(theme::border_style())
-            .style(Style::default().bg(theme::CARD_BG)),
-    );
-    f.render_widget(status, chunks[0]);
-
-    // Vault keys
-    let items: Vec<ListItem> = app
-        .vault_keys
-        .iter()
-        .map(|k| {
-            let display = if k.contains("password") || k.contains("api-key") {
-                format!("  {} = ********", k)
-            } else {
-                format!("  {}", k)
-            };
-            ListItem::new(Line::from(Span::styled(display, theme::text_normal())))
-        })
-        .collect();
-
-    let keys_list = List::new(items).block(
-        Block::default()
-            .title(Span::styled(
-                " Stored Credentials (AES-256-GCM) ",
-                theme::label(),
-            ))
-            .borders(Borders::ALL)
-            .border_style(theme::border_style())
-            .style(Style::default().bg(theme::CARD_BG)),
-    );
-    f.render_widget(keys_list, chunks[1]);
-}
-
-fn draw_send_history(f: &mut Frame, app: &App, area: Rect) {
-    if app.send_history.is_empty() {
-        let empty = Paragraph::new(vec![
-            Line::from(""),
-            Line::from(""),
-            Line::from(Span::styled(
-                "  No emails sent yet. Select a template and press [s] to send.",
-                theme::text_dim(),
-            )),
-        ])
-        .block(
-            Block::default()
-                .title(Span::styled(" Send History ", theme::label()))
-                .borders(Borders::ALL)
-                .border_style(theme::border_style())
-                .style(Style::default().bg(theme::CARD_BG)),
-        );
-        f.render_widget(empty, area);
-        return;
-    }
-
-    let items: Vec<ListItem> = app
-        .send_history
-        .iter()
-        .rev()
-        .map(|r| {
-            let status_style = if r.success {
-                theme::status_ok()
-            } else {
-                theme::status_err()
-            };
-            let icon = if r.success { "OK" } else { "FAIL" };
-            ListItem::new(Line::from(vec![
-                Span::styled(format!("  [{icon}] "), status_style),
-                Span::styled(&r.template, theme::text_normal()),
-                Span::styled(" -> ", theme::text_dim()),
-                Span::styled(&r.to, theme::text_muted()),
-                Span::styled(format!("  ({})", r.message_id), theme::text_dim()),
-            ]))
-        })
-        .collect();
-
-    let list = List::new(items).block(
-        Block::default()
-            .title(Span::styled(" Send History ", theme::label()))
-            .borders(Borders::ALL)
-            .border_style(theme::border_style())
-            .style(Style::default().bg(theme::CARD_BG)),
-    );
-    f.render_widget(list, area);
-}
-
 fn draw_statusbar(f: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -542,6 +452,7 @@ fn draw_statusbar(f: &mut Frame, app: &App, area: Rect) {
             Mode::Preview => "PREVIEW",
             Mode::Compose => "COMPOSE",
             Mode::Sending => "SENDING...",
+            Mode::Reading => "READING",
         };
         Line::from(vec![
             Span::styled(format!("  [{mode_label}] "), theme::label()),

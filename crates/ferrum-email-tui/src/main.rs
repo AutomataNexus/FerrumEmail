@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn run_login<B: Backend>(
     terminal: &mut Terminal<B>,
 ) -> Result<auth::Session, Box<dyn std::error::Error>> {
-    let mut email = String::new();
+    let mut username = String::new();
     let mut password = String::new();
     let mut focused = 0; // 0 = email, 1 = password
     let mut error: Option<String> = None;
@@ -101,7 +101,7 @@ fn run_login<B: Backend>(
                 .split(inner_area);
 
             let email_label = ratatui::text::Line::from(vec![Span::styled(
-                "  Email: ",
+                "  Username: ",
                 Style::default().fg(theme::LABEL),
             )]);
             f.render_widget(ratatui::widgets::Paragraph::new(email_label), rows[1]);
@@ -114,12 +114,12 @@ fn run_login<B: Backend>(
             let email_line = ratatui::text::Line::from(vec![
                 Span::raw("  "),
                 Span::styled(
-                    if email.is_empty() {
-                        "you@example.com"
+                    if username.is_empty() {
+                        "devops"
                     } else {
-                        &email
+                        &username
                     },
-                    if email.is_empty() {
+                    if username.is_empty() {
                         Style::default().fg(theme::TEXT_DIM)
                     } else {
                         email_style
@@ -196,8 +196,8 @@ fn run_login<B: Backend>(
                     focused = 1 - focused;
                 }
                 KeyCode::Enter => {
-                    if email.is_empty() || password.is_empty() {
-                        error = Some("Enter email and password".into());
+                    if username.is_empty() || password.is_empty() {
+                        error = Some("Enter username and password".into());
                         continue;
                     }
                     #[allow(unused_assignments)]
@@ -205,7 +205,7 @@ fn run_login<B: Backend>(
                         logging_in = true;
                     }
 
-                    match auth::login(&email, &password) {
+                    match auth::login(&username, &password) {
                         Ok(session) => return Ok(session),
                         Err(e) => {
                             error = Some(e);
@@ -218,14 +218,14 @@ fn run_login<B: Backend>(
                         return Err("Login cancelled".into());
                     }
                     if focused == 0 {
-                        email.push(ch);
+                        username.push(ch);
                     } else {
                         password.push(ch);
                     }
                 }
                 KeyCode::Backspace => {
                     if focused == 0 {
-                        email.pop();
+                        username.pop();
                     } else {
                         password.pop();
                     }
@@ -267,7 +267,14 @@ async fn run_app<B: Backend>(
                     KeyCode::Char('s') => app.send_selected().await?,
                     KeyCode::Char('p') => app.preview_selected(),
                     KeyCode::Char('r') => app.refresh().await?,
+                    KeyCode::Char('d') | KeyCode::Delete => app.delete_selected(),
                     KeyCode::Esc => app.dismiss_message(),
+                    _ => {}
+                },
+                app::Mode::Reading => match key.code {
+                    KeyCode::Esc | KeyCode::Char('q') => app.mode = app::Mode::Normal,
+                    KeyCode::Char('j') | KeyCode::Down => app.scroll_down(),
+                    KeyCode::Char('k') | KeyCode::Up => app.scroll_up(),
                     _ => {}
                 },
                 app::Mode::Compose => match key.code {
