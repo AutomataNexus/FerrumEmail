@@ -137,11 +137,13 @@ fn get_or_create_api_key(token: &str) -> Option<String> {
 }
 
 /// Clear saved session (logout).
+#[allow(dead_code)]
 pub fn logout() {
     std::fs::remove_file(session_path()).ok();
 }
 
 /// Get SMTP config for sending via the SaaS relay.
+#[allow(dead_code)]
 pub fn smtp_config_for_session(session: &Session) -> (String, u16, String, String) {
     let smtp_host = "ferrum-mail.com".to_string();
     let smtp_port = 587u16;
@@ -181,6 +183,7 @@ impl SaasClient {
         resp.json().map_err(|e| e.to_string())
     }
 
+    #[allow(dead_code)]
     fn post(&self, path: &str, body: &serde_json::Value) -> Result<serde_json::Value, String> {
         let resp = self
             .client

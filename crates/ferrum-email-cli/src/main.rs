@@ -181,7 +181,7 @@ fn cmd_keys() {
                     println!("No API keys. Create one at ferrum-mail.com/dashboard/keys");
                     return;
                 }
-                println!("{:<20} {:<12} {}", "PREFIX", "STATUS", "CREATED");
+                println!("{:<20} {:<12} CREATED", "PREFIX", "STATUS");
                 println!("{}", "-".repeat(50));
                 for k in keys {
                     println!(
@@ -210,7 +210,7 @@ fn cmd_history() {
                     println!("No emails sent yet.");
                     return;
                 }
-                println!("{:<12} {:<30} {:<10} {}", "DATE", "TO", "STATUS", "ID");
+                println!("{:<12} {:<30} {:<10} ID", "DATE", "TO", "STATUS");
                 println!("{}", "-".repeat(70));
                 for s in sends.iter().rev().take(20) {
                     let date = s["sent_at"].as_str().unwrap_or("");
@@ -224,125 +224,6 @@ fn cmd_history() {
                     );
                 }
                 println!("\n{} total sends", sends.len());
-            }
-        }
-        Err(e) => eprintln!("Error: {e}"),
-    }
-}
-
-// Removed mailbox commands (inbox, folders, read) — those are for Ferrum Mailbox clients
-
-#[allow(dead_code)]
-fn cmd_folders() {
-    let token = require_token();
-    match api_get("/folders/", &token) {
-        Ok(v) => {
-            if let Some(folders) = v.as_array() {
-                println!("{:<12} {:>6} {:>6}", "FOLDER", "TOTAL", "UNREAD");
-                println!("{}", "-".repeat(26));
-                for f in folders {
-                    println!(
-                        "{:<12} {:>6} {:>6}",
-                        f["name"].as_str().unwrap_or("?"),
-                        f["total"].as_u64().unwrap_or(0),
-                        f["unread"].as_u64().unwrap_or(0),
-                    );
-                }
-            }
-        }
-        Err(e) => eprintln!("Error: {e}"),
-    }
-}
-
-fn cmd_inbox(args: &[String]) {
-    let folder = args.get(2).map(|s| s.as_str()).unwrap_or("inbox");
-    let token = require_token();
-    match api_get(&format!("/folders/{folder}"), &token) {
-        Ok(v) => {
-            if let Some(msgs) = v.as_array() {
-                if msgs.is_empty() {
-                    println!("No messages in {folder}.");
-                    return;
-                }
-                for msg in msgs {
-                    let unread = if msg["read"].as_bool().unwrap_or(false) {
-                        " "
-                    } else {
-                        "*"
-                    };
-                    let from = msg["from_display"]
-                        .as_str()
-                        .or_else(|| msg["from"].as_str())
-                        .unwrap_or("?");
-                    let subject = msg["subject"].as_str().unwrap_or("(no subject)");
-                    let id = msg["id"].as_str().unwrap_or("");
-                    let date = msg["received_at"].as_str().unwrap_or("");
-                    let short_date = if date.len() > 10 { &date[..10] } else { date };
-                    println!(
-                        "{unread} {short_date}  {:<20}  {:<40}  {}",
-                        from,
-                        subject,
-                        &id[..8.min(id.len())]
-                    );
-                }
-                println!("\n{} messages. Use: ferrum read {folder} <id>", msgs.len());
-            }
-        }
-        Err(e) => eprintln!("Error: {e}"),
-    }
-}
-
-fn cmd_read(args: &[String]) {
-    if args.len() < 4 {
-        eprintln!("Usage: ferrum read <folder> <id>");
-        std::process::exit(1);
-    }
-    let folder = &args[2];
-    let id = &args[3];
-    let token = require_token();
-
-    match api_get(&format!("/messages/{folder}/{id}"), &token) {
-        Ok(detail) => {
-            let meta = &detail["meta"];
-            println!("Subject: {}", meta["subject"].as_str().unwrap_or("?"));
-            println!("From:    {}", meta["from"].as_str().unwrap_or("?"));
-            println!(
-                "To:      {}",
-                meta["to"]
-                    .as_array()
-                    .map(|a| a
-                        .iter()
-                        .filter_map(|v| v.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", "))
-                    .unwrap_or_default()
-            );
-            println!("Date:    {}", meta["date"].as_str().unwrap_or("?"));
-            println!("{}", "-".repeat(60));
-
-            let body = detail["text_body"]
-                .as_str()
-                .or_else(|| detail["html_body"].as_str())
-                .unwrap_or("(empty)");
-
-            // Strip HTML tags for display
-            if body.contains('<') {
-                let stripped: String = {
-                    let mut clean = String::new();
-                    let mut in_tag = false;
-                    for ch in body.replace("<br>", "\n").replace("</p>", "\n\n").chars() {
-                        match ch {
-                            '<' => in_tag = true,
-                            '>' => in_tag = false,
-                            _ if !in_tag => clean.push(ch),
-                            _ => {}
-                        }
-                    }
-                    clean
-                };
-                println!("{}", stripped.trim());
-            } else {
-                println!("{body}");
             }
         }
         Err(e) => eprintln!("Error: {e}"),
@@ -386,17 +267,4 @@ fn cmd_send(args: &[String]) {
             std::process::exit(1);
         }
     }
-}
-
-fn fmt_bytes(b: u64) -> String {
-    if b < 1024 {
-        return format!("{b}B");
-    }
-    if b < 1048576 {
-        return format!("{:.1}KB", b as f64 / 1024.0);
-    }
-    if b < 1073741824 {
-        return format!("{:.1}MB", b as f64 / 1048576.0);
-    }
-    format!("{:.2}GB", b as f64 / 1073741824.0)
 }

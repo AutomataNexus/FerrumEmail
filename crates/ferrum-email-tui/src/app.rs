@@ -4,8 +4,6 @@
 use crate::auth::{SaasClient, Session};
 use crate::templates;
 use ferrum_email_render::Renderer;
-use ferrum_email_send::Sender;
-use ferrum_email_send::providers::SmtpProvider;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Tab {
@@ -52,6 +50,7 @@ pub enum ComposeField {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct SendRecord {
     pub template: String,
     pub to: String,
@@ -79,11 +78,6 @@ pub struct App {
     pub renderer: Renderer,
     pub session: Session,
     client: SaasClient,
-    smtp_host: String,
-    smtp_port: u16,
-    smtp_user: String,
-    smtp_pass: String,
-    from: ferrum_email_send::Mailbox,
 }
 
 #[derive(Default)]
@@ -97,9 +91,6 @@ pub struct DashboardStats {
 impl App {
     pub async fn new_with_session(session: &Session) -> Result<Self, Box<dyn std::error::Error>> {
         let client = SaasClient::new(&session.token);
-        let (smtp_host, smtp_port, smtp_user, smtp_pass) =
-            crate::auth::smtp_config_for_session(session);
-        let from = ferrum_email_send::Mailbox::address(&session.email);
         let renderer = Renderer::default();
 
         let component = templates::render_template(0, &session.email);
@@ -125,11 +116,6 @@ impl App {
             renderer,
             session: session.clone(),
             client,
-            smtp_host,
-            smtp_port,
-            smtp_user,
-            smtp_pass,
-            from,
         };
 
         let _ = app.refresh().await;
@@ -253,14 +239,12 @@ impl App {
         if let Ok(sends) = self.client.send_history() {
             self.send_history = sends
                 .iter()
-                .filter_map(|s| {
-                    Some(SendRecord {
-                        template: s["subject"].as_str().unwrap_or("email").to_string(),
-                        to: s["to"].as_str().unwrap_or("?").to_string(),
-                        message_id: s["message_id"].as_str().unwrap_or("?").to_string(),
-                        timestamp: s["sent_at"].as_str().unwrap_or("").to_string(),
-                        success: s["status"].as_str() == Some("sent"),
-                    })
+                .map(|s| SendRecord {
+                    template: s["subject"].as_str().unwrap_or("email").to_string(),
+                    to: s["to"].as_str().unwrap_or("?").to_string(),
+                    message_id: s["message_id"].as_str().unwrap_or("?").to_string(),
+                    timestamp: s["sent_at"].as_str().unwrap_or("").to_string(),
+                    success: s["status"].as_str() == Some("sent"),
                 })
                 .collect();
         }
