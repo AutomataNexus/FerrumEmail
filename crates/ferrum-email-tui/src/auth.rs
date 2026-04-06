@@ -1,26 +1,36 @@
-//! Authentication against the Ferrum Mailbox API.
-//! Handles login, session persistence, and API communication.
+//! Authentication against the Ferrum Mail SaaS API.
+//! Handles login, session persistence, and API key retrieval.
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-const API_BASE: &str = "https://ferrum-mail.com/mailbox/api/v1";
+const API_BASE: &str = "https://ferrum-mail.com/v1";
 const SESSION_FILE: &str = "ferrum-session.json";
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Session {
     pub token: String,
-    pub username: String,
+    pub user_id: String,
     pub email: String,
-    pub display_name: String,
+    pub api_key: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct LoginResponse {
     token: String,
-    username: String,
+    user_id: String,
     email: String,
-    display_name: String,
+}
+
+#[derive(Deserialize)]
+struct KeyResponse {
+    key: String,
+}
+
+#[derive(Deserialize)]
+#[allow(dead_code)]
+struct KeyListItem {
+    prefix: String,
 }
 
 fn session_path() -> PathBuf {
@@ -39,7 +49,7 @@ pub fn load_session() -> Option<Session> {
     // Validate token by hitting a protected endpoint
     let client = reqwest::blocking::Client::new();
     let resp = client
-        .get(format!("{API_BASE}/preferences"))
+        .get(format!("{API_BASE}/dashboard"))
         .header("Authorization", format!("Bearer {}", session.token))
         .send()
         .ok()?;
@@ -58,14 +68,14 @@ fn save_session(session: &Session) {
     }
 }
 
-/// Login to Ferrum Mailbox API.
-pub fn login(username: &str, password: &str) -> Result<Session, String> {
+/// Login to Ferrum Mail SaaS.
+pub fn login(email: &str, password: &str) -> Result<Session, String> {
     let client = reqwest::blocking::Client::new();
 
     let resp = client
         .post(format!("{API_BASE}/auth/login"))
         .json(&serde_json::json!({
-            "username": username,
+            "email": email,
             "password": password,
         }))
         .send()
@@ -78,15 +88,52 @@ pub fn login(username: &str, password: &str) -> Result<Session, String> {
 
     let login_resp: LoginResponse = resp.json().map_err(|e| format!("Parse error: {e}"))?;
 
+    // Get or create an API key for sending
+    let api_key = get_or_create_api_key(&login_resp.token);
+
     let session = Session {
         token: login_resp.token,
-        username: login_resp.username.clone(),
+        user_id: login_resp.user_id,
         email: login_resp.email,
-        display_name: login_resp.display_name,
+        api_key,
     };
 
     save_session(&session);
     Ok(session)
+}
+
+/// Get existing API key or create one for the TUI.
+fn get_or_create_api_key(token: &str) -> Option<String> {
+    let client = reqwest::blocking::Client::new();
+
+    // List existing keys
+    let resp = client
+        .get(format!("{API_BASE}/keys"))
+        .header("Authorization", format!("Bearer {token}"))
+        .send()
+        .ok()?;
+
+    if resp.status().is_success() {
+        let keys: Vec<KeyListItem> = resp.json().ok()?;
+        if !keys.is_empty() {
+            return None; // User has keys, they'll use their existing one
+        }
+    }
+
+    // Create a new key
+    let resp = client
+        .post(format!("{API_BASE}/keys"))
+        .header("Authorization", format!("Bearer {token}"))
+        .json(&serde_json::json!({"name": "Ferrum TUI"}))
+        .send()
+        .ok()?;
+
+    if resp.status().is_success() {
+        let key_resp: KeyResponse = resp.json().ok()?;
+        Some(key_resp.key)
+    } else {
+        None
+    }
 }
 
 /// Clear saved session (logout).
@@ -94,14 +141,26 @@ pub fn logout() {
     std::fs::remove_file(session_path()).ok();
 }
 
-// ── Mailbox API client ──
+/// Get SMTP config for sending via the SaaS relay.
+pub fn smtp_config_for_session(session: &Session) -> (String, u16, String, String) {
+    let smtp_host = "ferrum-mail.com".to_string();
+    let smtp_port = 587u16;
+    let smtp_user = session
+        .api_key
+        .clone()
+        .unwrap_or_else(|| session.email.clone());
+    let smtp_pass = session.token.clone();
+    (smtp_host, smtp_port, smtp_user, smtp_pass)
+}
 
-pub struct MailboxClient {
+// ── SaaS API Client ──
+
+pub struct SaasClient {
     token: String,
     client: reqwest::blocking::Client,
 }
 
-impl MailboxClient {
+impl SaasClient {
     pub fn new(token: &str) -> Self {
         Self {
             token: token.to_string(),
@@ -136,41 +195,54 @@ impl MailboxClient {
         resp.json().map_err(|e| e.to_string())
     }
 
-    pub fn list_folders(&self) -> Result<Vec<serde_json::Value>, String> {
-        let v = self.get("/folders/")?;
+    pub fn dashboard(&self) -> Result<serde_json::Value, String> {
+        self.get("/dashboard")
+    }
+
+    pub fn send_history(&self) -> Result<Vec<serde_json::Value>, String> {
+        let v = self.get("/sends")?;
         v.as_array().cloned().ok_or_else(|| "bad response".into())
     }
 
-    pub fn list_messages(&self, folder: &str) -> Result<Vec<serde_json::Value>, String> {
-        let v = self.get(&format!("/folders/{folder}"))?;
+    pub fn list_keys(&self) -> Result<Vec<serde_json::Value>, String> {
+        let v = self.get("/keys")?;
         v.as_array().cloned().ok_or_else(|| "bad response".into())
     }
 
-    pub fn get_message(&self, folder: &str, id: &str) -> Result<serde_json::Value, String> {
-        self.get(&format!("/messages/{folder}/{id}"))
-    }
-
+    /// Send email via the SaaS API.
     pub fn send_email(
         &self,
-        to: &[String],
+        to: &str,
         subject: &str,
         html: &str,
         text: Option<&str>,
+        api_key: Option<&str>,
     ) -> Result<String, String> {
-        let resp = self.post("/send", &serde_json::json!({
-            "to": to,
-            "subject": subject,
-            "html": html,
-            "text": text,
-        }))?;
-        Ok(resp["message_id"].as_str().unwrap_or("sent").to_string())
-    }
+        let client = reqwest::blocking::Client::new();
+        let auth = if let Some(key) = api_key {
+            format!("Bearer {key}")
+        } else {
+            format!("Bearer {}", self.token)
+        };
 
-    pub fn move_message(&self, folder: &str, id: &str, to_folder: &str) -> Result<(), String> {
-        self.post(
-            &format!("/messages/{folder}/{id}/move"),
-            &serde_json::json!({"to_folder": to_folder}),
-        )?;
-        Ok(())
+        let resp = client
+            .post(format!("{API_BASE}/emails"))
+            .header("Authorization", auth)
+            .json(&serde_json::json!({
+                "to": to,
+                "subject": subject,
+                "html": html,
+                "text": text,
+            }))
+            .timeout(std::time::Duration::from_secs(60))
+            .send()
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(resp.text().unwrap_or_default());
+        }
+
+        let body: serde_json::Value = resp.json().map_err(|e| e.to_string())?;
+        Ok(body["message_id"].as_str().unwrap_or("sent").to_string())
     }
 }

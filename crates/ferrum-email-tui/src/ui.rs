@@ -81,32 +81,107 @@ fn draw_main(f: &mut Frame, app: &App, area: Rect) {
     match app.mode {
         Mode::Preview => draw_preview(f, app, area),
         Mode::Compose => draw_compose(f, app, area),
-        Mode::Reading => draw_reading(f, app, area),
         _ => match app.tab {
-            Tab::Inbox => draw_mailbox(f, app, area, "Inbox", &app.inbox),
+            Tab::Dashboard => draw_dashboard(f, app, area),
             Tab::Compose => draw_compose(f, app, area),
-            Tab::Outbox => draw_mailbox(f, app, area, "Outbox", &app.outbox),
             Tab::Templates => draw_templates(f, app, area),
             Tab::Preview => draw_preview(f, app, area),
+            Tab::SendHistory => draw_send_history_tab(f, app, area),
         },
     }
 }
 
-fn draw_reading(f: &mut Frame, app: &App, area: Rect) {
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme::BORDER))
-        .title(format!(" {} ", app.reading_subject))
-        .title_style(Style::default().fg(theme::TERRACOTTA).bold());
+fn draw_dashboard(f: &mut Frame, app: &App, area: Rect) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(7), Constraint::Min(5)])
+        .split(area);
 
-    let inner = block.inner(area);
-    f.render_widget(block, area);
+    // Stats
+    let stats = Paragraph::new(vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Email:   ", theme::label()),
+            Span::styled(&app.session.email, theme::text_normal()),
+        ]),
+        Line::from(vec![
+            Span::styled("  Plan:    ", theme::label()),
+            Span::styled(&app.dashboard_stats.plan, Style::default().fg(theme::TERRACOTTA).add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Sent:    ", theme::label()),
+            Span::styled(format!("{} total, {} today", app.dashboard_stats.emails_sent, app.dashboard_stats.emails_today), theme::text_normal()),
+        ]),
+        Line::from(vec![
+            Span::styled("  Quota:   ", theme::label()),
+            Span::styled(&app.dashboard_stats.quota, theme::text_muted()),
+        ]),
+    ])
+    .block(
+        Block::default()
+            .title(Span::styled(" Dashboard ", theme::label()))
+            .borders(Borders::ALL)
+            .border_style(theme::border_style())
+            .style(Style::default().bg(theme::CARD_BG)),
+    );
+    f.render_widget(stats, chunks[0]);
 
-    let text = Paragraph::new(app.reading_body.as_str())
-        .style(Style::default().fg(theme::TEXT))
-        .wrap(Wrap { trim: false })
-        .scroll((app.preview_scroll, 0));
-    f.render_widget(text, inner);
+    // API Keys
+    let key_items: Vec<ListItem> = app.api_keys.iter()
+        .map(|k| ListItem::new(Line::from(Span::styled(format!("  {k}"), theme::text_normal()))))
+        .collect();
+    let key_list = if key_items.is_empty() {
+        List::new(vec![ListItem::new(Line::from(Span::styled("  No API keys — create one at ferrum-mail.com/dashboard/keys", theme::text_dim())))])
+    } else {
+        List::new(key_items)
+    };
+    let keys = key_list.block(
+        Block::default()
+            .title(Span::styled(" API Keys ", theme::label()))
+            .borders(Borders::ALL)
+            .border_style(theme::border_style())
+            .style(Style::default().bg(theme::CARD_BG)),
+    );
+    f.render_widget(keys, chunks[1]);
+}
+
+fn draw_send_history_tab(f: &mut Frame, app: &App, area: Rect) {
+    if app.send_history.is_empty() {
+        let empty = Paragraph::new(vec![
+            Line::from(""),
+            Line::from(Span::styled("  No emails sent yet. Go to Compose or Templates to send.", theme::text_dim())),
+        ])
+        .block(
+            Block::default()
+                .title(Span::styled(" Send History ", theme::label()))
+                .borders(Borders::ALL)
+                .border_style(theme::border_style())
+                .style(Style::default().bg(theme::CARD_BG)),
+        );
+        f.render_widget(empty, area);
+        return;
+    }
+
+    let items: Vec<ListItem> = app.send_history.iter().rev().map(|r| {
+        let status_style = if r.success { theme::status_ok() } else { theme::status_err() };
+        let icon = if r.success { "OK" } else { "FAIL" };
+        ListItem::new(Line::from(vec![
+            Span::styled(format!("  [{icon}] "), status_style),
+            Span::styled(&r.template, theme::text_normal()),
+            Span::styled(" -> ", theme::text_dim()),
+            Span::styled(&r.to, theme::text_muted()),
+            Span::styled(format!("  ({})", r.message_id), theme::text_dim()),
+        ]))
+    }).collect();
+
+    let list = List::new(items).block(
+        Block::default()
+            .title(Span::styled(" Send History ", theme::label()))
+            .borders(Borders::ALL)
+            .border_style(theme::border_style())
+            .style(Style::default().bg(theme::CARD_BG)),
+    );
+    f.render_widget(list, area);
 }
 
 fn draw_templates(f: &mut Frame, app: &App, area: Rect) {
@@ -230,85 +305,6 @@ fn draw_preview(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(text_view, chunks[1]);
 }
 
-fn draw_mailbox(
-    f: &mut Frame,
-    _app: &App,
-    area: Rect,
-    title: &str,
-    items: &[crate::app::MailItem],
-) {
-    if items.is_empty() {
-        let empty = Paragraph::new(vec![
-            Line::from(""),
-            Line::from(""),
-            Line::from(Span::styled(
-                format!("  No messages in {title}. Compose an email to get started."),
-                theme::text_dim(),
-            )),
-        ])
-        .block(
-            Block::default()
-                .title(Span::styled(format!(" {title} "), theme::label()))
-                .borders(Borders::ALL)
-                .border_style(theme::border_style())
-                .style(Style::default().bg(theme::CARD_BG)),
-        );
-        f.render_widget(empty, area);
-        return;
-    }
-
-    let mail_items: Vec<ListItem> = items
-        .iter()
-        .rev()
-        .map(|m| {
-            let status_style = if m.status == "unread" {
-                Style::default()
-                    .fg(theme::TERRACOTTA)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                theme::text_dim()
-            };
-            let subject_style = if m.status == "unread" {
-                Style::default()
-                    .fg(theme::TEXT)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                theme::text_normal()
-            };
-            let addr = if title == "Inbox" { &m.from } else { &m.to };
-            ListItem::new(vec![
-                Line::from(vec![
-                    Span::styled(
-                        format!("  {} ", if m.status == "unread" { "●" } else { " " }),
-                        status_style,
-                    ),
-                    Span::styled(format!("{:30}", addr), theme::label()),
-                    Span::styled(&m.subject, subject_style),
-                ]),
-                Line::from(vec![
-                    Span::styled("    ", theme::text_dim()),
-                    Span::styled(&m.preview, theme::text_dim()),
-                    Span::styled(
-                        format!("  {}", &m.timestamp),
-                        Style::default().fg(theme::TEXT_DIM),
-                    ),
-                ]),
-            ])
-        })
-        .collect();
-
-    let list = List::new(mail_items).block(
-        Block::default()
-            .title(Span::styled(
-                format!(" {title} ({}) ", items.len()),
-                theme::label(),
-            ))
-            .borders(Borders::ALL)
-            .border_style(theme::border_style())
-            .style(Style::default().bg(theme::CARD_BG)),
-    );
-    f.render_widget(list, area);
-}
 
 fn draw_compose(f: &mut Frame, app: &App, area: Rect) {
     let is_editing = app.mode == Mode::Compose;
@@ -452,7 +448,6 @@ fn draw_statusbar(f: &mut Frame, app: &App, area: Rect) {
             Mode::Preview => "PREVIEW",
             Mode::Compose => "COMPOSE",
             Mode::Sending => "SENDING...",
-            Mode::Reading => "READING",
         };
         Line::from(vec![
             Span::styled(format!("  [{mode_label}] "), theme::label()),

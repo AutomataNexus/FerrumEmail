@@ -267,14 +267,7 @@ async fn run_app<B: Backend>(
                     KeyCode::Char('s') => app.send_selected().await?,
                     KeyCode::Char('p') => app.preview_selected(),
                     KeyCode::Char('r') => app.refresh().await?,
-                    KeyCode::Char('d') | KeyCode::Delete => app.delete_selected(),
                     KeyCode::Esc => app.dismiss_message(),
-                    _ => {}
-                },
-                app::Mode::Reading => match key.code {
-                    KeyCode::Esc | KeyCode::Char('q') => app.mode = app::Mode::Normal,
-                    KeyCode::Char('j') | KeyCode::Down => app.scroll_down(),
-                    KeyCode::Char('k') | KeyCode::Up => app.scroll_up(),
                     _ => {}
                 },
                 app::Mode::Compose => match key.code {

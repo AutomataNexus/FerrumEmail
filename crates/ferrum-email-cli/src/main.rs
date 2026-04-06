@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-const API_BASE: &str = "https://ferrum-mail.com/mailbox/api/v1";
+const API_BASE: &str = "https://ferrum-mail.com/v1";
 const SESSION_FILE: &str = "ferrum-session.json";
 
 fn session_path() -> PathBuf {
@@ -63,11 +63,10 @@ fn main() {
     match cmd {
         "login" => cmd_login(&args),
         "logout" => cmd_logout(),
-        "inbox" | "ls" => cmd_inbox(&args),
-        "folders" => cmd_folders(),
-        "read" => cmd_read(&args),
         "send" => cmd_send(&args),
         "whoami" => cmd_whoami(),
+        "keys" => cmd_keys(),
+        "history" => cmd_history(),
         "help" | "--help" | "-h" => cmd_help(),
         _ => {
             eprintln!("Unknown command: {cmd}");
@@ -78,33 +77,37 @@ fn main() {
 }
 
 fn cmd_help() {
-    println!("Ferrum Mail CLI");
+    println!("Ferrum Email CLI — send transactional emails from the command line");
     println!();
     println!("USAGE: ferrum <command> [options]");
     println!();
     println!("COMMANDS:");
-    println!("  login <username> <password>   Sign in to Ferrum Mail");
-    println!("  logout                        Clear saved session");
-    println!("  whoami                        Show current user info");
-    println!("  inbox [folder]                List messages (default: inbox)");
-    println!("  folders                       List all folders with counts");
-    println!("  read <folder> <id>            Read a message");
-    println!("  send <to> <subject> <body>    Send an email");
-    println!("  help                          Show this help");
+    println!("  login <email> <password>   Sign in to ferrum-mail.com");
+    println!("  logout                     Clear saved session");
+    println!("  whoami                     Show account info + plan");
+    println!("  send <to> <subject> <body> Send a transactional email");
+    println!("  keys                       List your API keys");
+    println!("  history                    Show send history");
+    println!("  help                       Show this help");
+    println!();
+    println!("EXAMPLES:");
+    println!("  ferrum login me@example.com mypassword");
+    println!("  ferrum send user@example.com \"Welcome\" \"Hello, welcome to our app!\"");
+    println!("  ferrum keys");
 }
 
 fn cmd_login(args: &[String]) {
     if args.len() < 4 {
-        eprintln!("Usage: ferrum login <username> <password>");
+        eprintln!("Usage: ferrum login <email> <password>");
         std::process::exit(1);
     }
-    let username = &args[2];
+    let email = &args[2];
     let password = &args[3];
 
     let client = reqwest::blocking::Client::new();
     let resp = client
         .post(format!("{API_BASE}/auth/login"))
-        .json(&serde_json::json!({"username": username, "password": password}))
+        .json(&serde_json::json!({"email": email, "password": password}))
         .send();
 
     match resp {
@@ -114,7 +117,7 @@ fn cmd_login(args: &[String]) {
                 session_path(),
                 serde_json::to_string_pretty(&body).unwrap_or_default(),
             );
-            println!("Logged in as {}@ferrum-mail.com", body["username"].as_str().unwrap_or(username));
+            println!("Logged in as {}", body["email"].as_str().unwrap_or(email));
         }
         Ok(r) => {
             eprintln!("Login failed: {}", r.text().unwrap_or_default());
@@ -134,15 +137,15 @@ fn cmd_logout() {
 
 fn cmd_whoami() {
     let token = require_token();
-    match api_get("/preferences", &token) {
-        Ok(prefs) => {
-            println!("Username:  {}", prefs["username"].as_str().unwrap_or("?"));
-            println!("Email:     {}", prefs["email"].as_str().unwrap_or("?"));
-            println!("Name:      {}", prefs["display_name"].as_str().unwrap_or("?"));
-            println!("Plan:      {}", prefs["plan"].as_str().unwrap_or("Free"));
-            let used = prefs["storage_used"].as_u64().unwrap_or(0);
-            let limit = prefs["storage_limit"].as_u64().unwrap_or(0);
-            println!("Storage:   {} / {}", fmt_bytes(used), fmt_bytes(limit));
+    match api_get("/dashboard", &token) {
+        Ok(dash) => {
+            println!("Email:       {}", dash["email"].as_str().unwrap_or("?"));
+            println!("Plan:        {}", dash["plan"].as_str().unwrap_or("Free"));
+            println!("Sends:       {} total", dash["total_sends"].as_u64().unwrap_or(0));
+            println!("Today:       {} sent", dash["sends_today"].as_u64().unwrap_or(0));
+            if let Some(quota) = dash["monthly_quota"].as_str().or(dash["quota"].as_str()) {
+                println!("Quota:       {quota}/mo");
+            }
         }
         Err(e) => {
             eprintln!("Error: {e}");
@@ -151,6 +154,63 @@ fn cmd_whoami() {
     }
 }
 
+fn cmd_keys() {
+    let token = require_token();
+    match api_get("/keys", &token) {
+        Ok(v) => {
+            if let Some(keys) = v.as_array() {
+                if keys.is_empty() {
+                    println!("No API keys. Create one at ferrum-mail.com/dashboard/keys");
+                    return;
+                }
+                println!("{:<20} {:<12} {}", "PREFIX", "STATUS", "CREATED");
+                println!("{}", "-".repeat(50));
+                for k in keys {
+                    println!(
+                        "{:<20} {:<12} {}",
+                        k["prefix"].as_str().unwrap_or("?"),
+                        if k["revoked"].as_bool().unwrap_or(false) { "revoked" } else { "active" },
+                        k["created_at"].as_str().unwrap_or("?"),
+                    );
+                }
+            }
+        }
+        Err(e) => eprintln!("Error: {e}"),
+    }
+}
+
+fn cmd_history() {
+    let token = require_token();
+    match api_get("/sends", &token) {
+        Ok(v) => {
+            if let Some(sends) = v.as_array() {
+                if sends.is_empty() {
+                    println!("No emails sent yet.");
+                    return;
+                }
+                println!("{:<12} {:<30} {:<10} {}", "DATE", "TO", "STATUS", "ID");
+                println!("{}", "-".repeat(70));
+                for s in sends.iter().rev().take(20) {
+                    let date = s["sent_at"].as_str().unwrap_or("");
+                    let short = if date.len() > 10 { &date[..10] } else { date };
+                    println!(
+                        "{:<12} {:<30} {:<10} {}",
+                        short,
+                        s["to"].as_str().unwrap_or("?"),
+                        s["status"].as_str().unwrap_or("?"),
+                        s["message_id"].as_str().unwrap_or(""),
+                    );
+                }
+                println!("\n{} total sends", sends.len());
+            }
+        }
+        Err(e) => eprintln!("Error: {e}"),
+    }
+}
+
+// Removed mailbox commands (inbox, folders, read) — those are for Ferrum Mailbox clients
+
+#[allow(dead_code)]
 fn cmd_folders() {
     let token = require_token();
     match api_get("/folders/", &token) {
@@ -251,10 +311,10 @@ fn cmd_read(args: &[String]) {
 fn cmd_send(args: &[String]) {
     if args.len() < 5 {
         eprintln!("Usage: ferrum send <to> <subject> <body>");
-        eprintln!("  Multiple recipients: ferrum send \"a@b.com,c@d.com\" \"Subject\" \"Body\"");
+        eprintln!("  Example: ferrum send user@example.com \"Welcome\" \"Hello, welcome to our app!\"");
         std::process::exit(1);
     }
-    let to: Vec<String> = args[2].split(',').map(|s| s.trim().to_string()).collect();
+    let to = &args[2];
     let subject = &args[3];
     let body = &args[4];
     let token = require_token();
@@ -264,7 +324,7 @@ fn cmd_send(args: &[String]) {
         body.replace('\n', "<br>")
     );
 
-    match api_post("/send", &token, &serde_json::json!({
+    match api_post("/emails", &token, &serde_json::json!({
         "to": to,
         "subject": subject,
         "html": html,
@@ -272,7 +332,7 @@ fn cmd_send(args: &[String]) {
     })) {
         Ok(resp) => {
             let mid = resp["message_id"].as_str().unwrap_or("sent");
-            println!("Sent to {} (ID: {mid})", to.join(", "));
+            println!("Sent to {to} (ID: {mid})");
         }
         Err(e) => {
             eprintln!("Send failed: {e}");
