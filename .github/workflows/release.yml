@@ -63,18 +63,28 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y musl-tools
 
-      - name: Build TUI binary
+      - name: Build TUI binary (Linux only)
+        if: contains(matrix.target, 'linux')
         run: cargo build --release --target ${{ matrix.target }} -p ferrum-email-tui
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
+      - name: Build SDK library (macOS)
+        if: contains(matrix.target, 'apple')
+        run: cargo build --release --target ${{ matrix.target }} -p ferrum-email
+
       - name: Package binary
         run: |
           mkdir -p dist
-          cp target/${{ matrix.target }}/release/ferrum-tui dist/
-          cd dist
-          tar czf ferrum-tui-${{ matrix.target }}.tar.gz ferrum-tui
-          sha256sum ferrum-tui-${{ matrix.target }}.tar.gz > ferrum-tui-${{ matrix.target }}.tar.gz.sha256
+          if [ -f "target/${{ matrix.target }}/release/ferrum-tui" ]; then
+            cp target/${{ matrix.target }}/release/ferrum-tui dist/
+            cd dist
+            tar czf ferrum-tui-${{ matrix.target }}.tar.gz ferrum-tui
+            sha256sum ferrum-tui-${{ matrix.target }}.tar.gz > ferrum-tui-${{ matrix.target }}.tar.gz.sha256 || shasum -a 256 ferrum-tui-${{ matrix.target }}.tar.gz > ferrum-tui-${{ matrix.target }}.tar.gz.sha256
+          else
+            echo "No TUI binary for this target (macOS), skipping package"
+            touch dist/.placeholder
+          fi
 
       - name: Generate SLSA provenance attestation
         uses: actions/attest-build-provenance@v2
