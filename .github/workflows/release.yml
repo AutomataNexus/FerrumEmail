@@ -38,10 +38,6 @@ jobs:
             os: ubuntu-latest
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
-          - target: x86_64-apple-darwin
-            os: macos-latest
-          - target: aarch64-apple-darwin
-            os: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -69,22 +65,13 @@ jobs:
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
-      - name: Build SDK library (macOS)
-        if: contains(matrix.target, 'apple')
-        run: cargo build --release --target ${{ matrix.target }} -p ferrum-email
-
       - name: Package binary
         run: |
           mkdir -p dist
-          if [ -f "target/${{ matrix.target }}/release/ferrum-tui" ]; then
-            cp target/${{ matrix.target }}/release/ferrum-tui dist/
-            cd dist
-            tar czf ferrum-tui-${{ matrix.target }}.tar.gz ferrum-tui
-            sha256sum ferrum-tui-${{ matrix.target }}.tar.gz > ferrum-tui-${{ matrix.target }}.tar.gz.sha256 || shasum -a 256 ferrum-tui-${{ matrix.target }}.tar.gz > ferrum-tui-${{ matrix.target }}.tar.gz.sha256
-          else
-            echo "No TUI binary for this target (macOS), skipping package"
-            touch dist/.placeholder
-          fi
+          cp target/${{ matrix.target }}/release/ferrum-tui dist/
+          cd dist
+          tar czf ferrum-tui-${{ matrix.target }}.tar.gz ferrum-tui
+          sha256sum ferrum-tui-${{ matrix.target }}.tar.gz > ferrum-tui-${{ matrix.target }}.tar.gz.sha256
 
       - name: Generate SLSA provenance attestation
         uses: actions/attest-build-provenance@v2
