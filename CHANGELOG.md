@@ -2,6 +2,33 @@
 
 All notable changes to the Ferrum Email SDK are documented here.
 
+## [0.1.5] - 2026-04-06
+
+### Added
+- **NexusRelay v0.2** — direct MX delivery with DKIM signing, port 25/587 fallback
+- `DirectMxProvider` now tries port 25 first, falls back to 587 for cloud SMTP compatibility
+- Domain validation and sanitization before DNS MX lookups (prevents command injection)
+- 15s connect / 30s command / 60s data timeouts on all outbound SMTP operations
+- `SmtpProvider::build_mime()` is now public — reusable for custom providers
+- TUI and CLI authenticate via SaaS API (JWT-based)
+- TUI login screen with Ferrum branding
+
+### Fixed
+- Sending to @ferrum-mail.com users no longer routes through external SMTP (direct local delivery)
+- Clippy + fmt cleanups across entire workspace
+
+## [0.1.4] - 2026-04-01
+
+### Added
+- TUI login screen — authenticate via Ferrum Mail SaaS API
+- SLSA release workflow now includes `ferrum-tui` binary with checksums
+- `ferrum-email` umbrella crate added to release artifacts
+
+### Fixed
+- Export fixes, empty logo resolved
+- CI clippy + fmt (collapsible_if, single_match, is_multiple_of)
+- Unused variable warnings cleaned up
+
 ## [0.1.3] - 2026-03-30
 
 ### Added
