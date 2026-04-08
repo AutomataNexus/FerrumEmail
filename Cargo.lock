@@ -593,7 +593,7 @@ dependencies = [
 
 [[package]]
 name = "ferrum-email"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "ferrum-email-components",
  "ferrum-email-core",
@@ -603,7 +603,7 @@ dependencies = [
 
 [[package]]
 name = "ferrum-email-cli"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "dirs",
  "reqwest",
@@ -612,25 +612,25 @@ dependencies = [
 
 [[package]]
 name = "ferrum-email-components"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "ferrum-email-core",
 ]
 
 [[package]]
 name = "ferrum-email-core"
-version = "0.1.5"
+version = "0.1.6"
 
 [[package]]
 name = "ferrum-email-render"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "ferrum-email-core",
 ]
 
 [[package]]
 name = "ferrum-email-send"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "aegis-db-vault",
  "async-trait",
@@ -648,7 +648,7 @@ dependencies = [
 
 [[package]]
 name = "ferrum-email-tui"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "crossterm",
  "dirs",
