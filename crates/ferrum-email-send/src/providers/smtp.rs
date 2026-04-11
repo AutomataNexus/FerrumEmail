@@ -69,9 +69,106 @@ impl SmtpProvider {
         }
 
         let has_text = message.text.is_some();
-        let has_attachments = !message.attachments.is_empty();
+        // Split inline images (with Content-ID) from regular attachments
+        let inline_images: Vec<&crate::message::Attachment> = message
+            .attachments
+            .iter()
+            .filter(|a| a.content_id.is_some())
+            .collect();
+        let regular_attachments: Vec<&crate::message::Attachment> = message
+            .attachments
+            .iter()
+            .filter(|a| a.content_id.is_none())
+            .collect();
+        let has_inline = !inline_images.is_empty();
+        let has_attachments = !regular_attachments.is_empty();
 
-        if has_attachments {
+        // Helper: write the text+html alternative block
+        let write_alternative = |mime: &mut String, alt_boundary: &str| {
+            if let Some(ref text) = message.text {
+                mime.push_str(&format!("--{alt_boundary}\r\n"));
+                mime.push_str("Content-Type: text/plain; charset=UTF-8\r\n");
+                mime.push_str("Content-Transfer-Encoding: 7bit\r\n\r\n");
+                mime.push_str(text);
+                mime.push_str("\r\n");
+            }
+            mime.push_str(&format!("--{alt_boundary}\r\n"));
+            mime.push_str("Content-Type: text/html; charset=UTF-8\r\n");
+            mime.push_str("Content-Transfer-Encoding: 7bit\r\n\r\n");
+            mime.push_str(&message.html);
+            mime.push_str("\r\n");
+            mime.push_str(&format!("--{alt_boundary}--\r\n"));
+        };
+
+        // Helper: write a single attachment part
+        let write_attachment = |mime: &mut String, att: &crate::message::Attachment| {
+            mime.push_str(&format!(
+                "Content-Type: {}; name=\"{}\"\r\n",
+                att.content_type, att.filename
+            ));
+            mime.push_str("Content-Transfer-Encoding: base64\r\n");
+            if let Some(ref cid) = att.content_id {
+                mime.push_str(&format!("Content-ID: <{cid}>\r\n"));
+                mime.push_str(&format!(
+                    "Content-Disposition: inline; filename=\"{}\"\r\n\r\n",
+                    att.filename
+                ));
+            } else {
+                mime.push_str(&format!(
+                    "Content-Disposition: attachment; filename=\"{}\"\r\n\r\n",
+                    att.filename
+                ));
+            }
+            let encoded = base64::engine::general_purpose::STANDARD.encode(&att.content);
+            for chunk in encoded.as_bytes().chunks(76) {
+                mime.push_str(std::str::from_utf8(chunk).unwrap_or(""));
+                mime.push_str("\r\n");
+            }
+        };
+
+        if has_attachments && has_inline {
+            // multipart/mixed → (multipart/related → (alternative + inline)) + attachments
+            let related_boundary = format!("ferrum-rel-{:016x}", rand_u64());
+            let alt_boundary = format!("ferrum-alt-{:016x}", rand_u64());
+            mime.push_str(&format!(
+                "Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\n"
+            ));
+            mime.push_str(&format!("--{boundary}\r\n"));
+            mime.push_str(&format!(
+                "Content-Type: multipart/related; boundary=\"{related_boundary}\"\r\n\r\n"
+            ));
+            mime.push_str(&format!("--{related_boundary}\r\n"));
+            mime.push_str(&format!(
+                "Content-Type: multipart/alternative; boundary=\"{alt_boundary}\"\r\n\r\n"
+            ));
+            write_alternative(&mut mime, &alt_boundary);
+            for img in &inline_images {
+                mime.push_str(&format!("--{related_boundary}\r\n"));
+                write_attachment(&mut mime, img);
+            }
+            mime.push_str(&format!("--{related_boundary}--\r\n"));
+            for att in &regular_attachments {
+                mime.push_str(&format!("--{boundary}\r\n"));
+                write_attachment(&mut mime, att);
+            }
+            mime.push_str(&format!("--{boundary}--\r\n"));
+        } else if has_inline {
+            // multipart/related → (alternative + inline)
+            let alt_boundary = format!("ferrum-alt-{:016x}", rand_u64());
+            mime.push_str(&format!(
+                "Content-Type: multipart/related; boundary=\"{boundary}\"\r\n\r\n"
+            ));
+            mime.push_str(&format!("--{boundary}\r\n"));
+            mime.push_str(&format!(
+                "Content-Type: multipart/alternative; boundary=\"{alt_boundary}\"\r\n\r\n"
+            ));
+            write_alternative(&mut mime, &alt_boundary);
+            for img in &inline_images {
+                mime.push_str(&format!("--{boundary}\r\n"));
+                write_attachment(&mut mime, img);
+            }
+            mime.push_str(&format!("--{boundary}--\r\n"));
+        } else if has_attachments {
             // multipart/mixed wrapping multipart/alternative + attachments
             let alt_boundary = format!("ferrum-alt-{:016x}", rand_u64());
             mime.push_str(&format!(
@@ -81,39 +178,10 @@ impl SmtpProvider {
             mime.push_str(&format!(
                 "Content-Type: multipart/alternative; boundary=\"{alt_boundary}\"\r\n\r\n"
             ));
-
-            if let Some(ref text) = message.text {
-                mime.push_str(&format!("--{alt_boundary}\r\n"));
-                mime.push_str("Content-Type: text/plain; charset=UTF-8\r\n");
-                mime.push_str("Content-Transfer-Encoding: 7bit\r\n\r\n");
-                mime.push_str(text);
-                mime.push_str("\r\n");
-            }
-
-            mime.push_str(&format!("--{alt_boundary}\r\n"));
-            mime.push_str("Content-Type: text/html; charset=UTF-8\r\n");
-            mime.push_str("Content-Transfer-Encoding: 7bit\r\n\r\n");
-            mime.push_str(&message.html);
-            mime.push_str("\r\n");
-            mime.push_str(&format!("--{alt_boundary}--\r\n"));
-
-            for att in &message.attachments {
+            write_alternative(&mut mime, &alt_boundary);
+            for att in &regular_attachments {
                 mime.push_str(&format!("--{boundary}\r\n"));
-                mime.push_str(&format!(
-                    "Content-Type: {}; name=\"{}\"\r\n",
-                    att.content_type, att.filename
-                ));
-                mime.push_str("Content-Transfer-Encoding: base64\r\n");
-                mime.push_str(&format!(
-                    "Content-Disposition: attachment; filename=\"{}\"\r\n\r\n",
-                    att.filename
-                ));
-                let encoded = base64::engine::general_purpose::STANDARD.encode(&att.content);
-                // Wrap base64 at 76 chars per RFC 2045
-                for chunk in encoded.as_bytes().chunks(76) {
-                    mime.push_str(std::str::from_utf8(chunk).unwrap_or(""));
-                    mime.push_str("\r\n");
-                }
+                write_attachment(&mut mime, att);
             }
             mime.push_str(&format!("--{boundary}--\r\n"));
         } else if has_text {

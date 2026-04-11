@@ -162,6 +162,9 @@ pub struct Attachment {
     pub filename: String,
     pub content: Vec<u8>,
     pub content_type: String,
+    /// Optional Content-ID for inline images referenced by `<img src="cid:...">`.
+    /// When set, the attachment is marked `inline` instead of a regular attachment.
+    pub content_id: Option<String>,
 }
 
 impl Attachment {
@@ -175,6 +178,22 @@ impl Attachment {
             filename: filename.into(),
             content,
             content_type: content_type.into(),
+            content_id: None,
+        }
+    }
+
+    /// Create an inline attachment (CID image) that renders in place via `cid:{id}`.
+    pub fn inline(
+        filename: impl Into<String>,
+        content: Vec<u8>,
+        content_type: impl Into<String>,
+        content_id: impl Into<String>,
+    ) -> Self {
+        Attachment {
+            filename: filename.into(),
+            content,
+            content_type: content_type.into(),
+            content_id: Some(content_id.into()),
         }
     }
 }
