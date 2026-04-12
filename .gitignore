@@ -18,3 +18,9 @@ ARCHITECTURE.md
 tools/
 FERRUM_SUITE_DOCUMENTATION.md
 mdpdf.log
+# Claude Code / Obsidian vault files (per-session, not project code)
+WORK_STATE.md
+summary.md
+CHEATSHEET.md
+claudeconvo.md
+oracleresponses.md
