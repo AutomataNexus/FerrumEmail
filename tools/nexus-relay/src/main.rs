@@ -6,6 +6,7 @@
 
 use axum::{Router, extract::Json, http::StatusCode, routing::post};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
@@ -17,9 +18,9 @@ const DATA_TIMEOUT: Duration = Duration::from_secs(60);
 
 struct RelayConfig {
     ehlo_domain: String,
-    dkim_key_path: String,
-    dkim_domain: String,
+    dkim_default_domain: String,
     dkim_selector: String,
+    dkim_keys: HashMap<String, String>,
     tls_config: Arc<rustls::ClientConfig>,
 }
 
@@ -58,31 +59,57 @@ async fn main() {
         .with_root_certificates(root_store)
         .with_no_client_auth();
 
+    let ehlo_domain =
+        std::env::var("EHLO_DOMAIN").unwrap_or_else(|_| "relay.ferrum-mail.com".into());
+    let dkim_dir =
+        std::env::var("DKIM_DIR").unwrap_or_else(|_| "/var/lib/ferrum-email/dkim".into());
+    let dkim_default_domain =
+        std::env::var("DKIM_DOMAIN").unwrap_or_else(|_| "ferrum-mail.com".into());
+    let dkim_selector = std::env::var("DKIM_SELECTOR").unwrap_or_else(|_| "default".into());
+
+    // Scan dkim_dir for *.private files; filename stem = domain.
+    let mut dkim_keys: HashMap<String, String> = HashMap::new();
+    match std::fs::read_dir(&dkim_dir) {
+        Ok(entries) => {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) != Some("private") {
+                    continue;
+                }
+                let domain = match path.file_stem().and_then(|s| s.to_str()) {
+                    Some(s) => s.to_lowercase(),
+                    None => continue,
+                };
+                match std::fs::read_to_string(&path) {
+                    Ok(pem) => {
+                        tracing::info!("DKIM key loaded: {} -> {}", domain, path.display());
+                        dkim_keys.insert(domain, pem);
+                    }
+                    Err(e) => tracing::warn!("failed to read {}: {e}", path.display()),
+                }
+            }
+        }
+        Err(e) => tracing::warn!("DKIM dir {dkim_dir} unreadable: {e}"),
+    }
+
+    if dkim_keys.is_empty() {
+        tracing::warn!("no DKIM keys loaded from {dkim_dir} — emails will NOT be signed");
+    }
+
     let config = Arc::new(RelayConfig {
-        ehlo_domain: std::env::var("EHLO_DOMAIN")
-            .unwrap_or_else(|_| "relay.ferrum-mail.com".into()),
-        dkim_key_path: std::env::var("DKIM_KEY_PATH")
-            .unwrap_or_else(|_| "/var/lib/ferrum-email/dkim/ferrum-mail.com.private".into()),
-        dkim_domain: std::env::var("DKIM_DOMAIN").unwrap_or_else(|_| "ferrum-mail.com".into()),
-        dkim_selector: std::env::var("DKIM_SELECTOR").unwrap_or_else(|_| "ferrum".into()),
+        ehlo_domain,
+        dkim_default_domain: dkim_default_domain.to_lowercase(),
+        dkim_selector,
+        dkim_keys,
         tls_config: Arc::new(tls_config),
     });
 
     tracing::info!(
-        "NexusRelay v0.2 — direct MX delivery, DKIM domain={} selector={}",
-        config.dkim_domain,
-        config.dkim_selector
+        "NexusRelay v0.3 — direct MX delivery, default DKIM domain={} selector={} ({} keys loaded)",
+        config.dkim_default_domain,
+        config.dkim_selector,
+        config.dkim_keys.len()
     );
-
-    // Validate DKIM key exists
-    if !std::path::Path::new(&config.dkim_key_path).exists() {
-        tracing::warn!(
-            "DKIM private key not found at {} — emails will NOT be signed",
-            config.dkim_key_path
-        );
-    } else {
-        tracing::info!("DKIM key loaded: {}", config.dkim_key_path);
-    }
 
     let app = Router::new()
         .route("/relay", post(handle_relay))
@@ -102,8 +129,8 @@ async fn handle_relay(
 ) -> Result<Json<RelayResponse>, (StatusCode, Json<RelayError>)> {
     tracing::info!("Relay: {} -> {}", req.from, req.to.join(", "));
 
-    // Sign with DKIM
-    let signed_body = match sign_dkim(&config, &req.mime_body) {
+    // Sign with DKIM — key picked by From-domain, falling back to the default.
+    let signed_body = match sign_dkim(&config, &req.from, &req.mime_body) {
         Ok(s) => s,
         Err(e) => {
             tracing::warn!("DKIM signing failed: {e} — sending unsigned");
@@ -164,20 +191,37 @@ async fn handle_relay(
 }
 
 /// DKIM sign the MIME body using mail-auth.
-fn sign_dkim(config: &RelayConfig, mime_body: &str) -> Result<String, String> {
+///
+/// Selects the signing key by the From-address domain. Falls back to
+/// `dkim_default_domain` if the From-domain has no key configured.
+fn sign_dkim(config: &RelayConfig, from: &str, mime_body: &str) -> Result<String, String> {
     use mail_auth::common::crypto::{RsaKey, Sha256};
     use mail_auth::common::headers::HeaderWriter;
     use mail_auth::dkim::DkimSigner;
 
-    let pem = std::fs::read_to_string(&config.dkim_key_path)
-        .map_err(|e| format!("read DKIM key: {e}"))?;
+    let from_domain = from
+        .rsplit('@')
+        .next()
+        .unwrap_or("")
+        .trim_end_matches('>')
+        .to_lowercase();
 
-    let pk = RsaKey::<Sha256>::from_rsa_pem(&pem)
-        .or_else(|_| RsaKey::<Sha256>::from_pkcs8_pem(&pem))
-        .map_err(|e| format!("parse DKIM key: {e:?}"))?;
+    let (sign_domain, pem) = if let Some(pem) = config.dkim_keys.get(&from_domain) {
+        (from_domain.as_str(), pem.as_str())
+    } else if let Some(pem) = config.dkim_keys.get(&config.dkim_default_domain) {
+        (config.dkim_default_domain.as_str(), pem.as_str())
+    } else {
+        return Err(format!(
+            "no DKIM key for {from_domain} and no default key available"
+        ));
+    };
+
+    let pk = RsaKey::<Sha256>::from_rsa_pem(pem)
+        .or_else(|_| RsaKey::<Sha256>::from_pkcs8_pem(pem))
+        .map_err(|e| format!("parse DKIM key for {sign_domain}: {e:?}"))?;
 
     let signer = DkimSigner::from_key(pk)
-        .domain(&config.dkim_domain)
+        .domain(sign_domain)
         .selector(&config.dkim_selector)
         .headers(["From", "To", "Subject", "Date", "Message-ID"]);
 
