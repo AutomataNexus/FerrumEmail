@@ -67,9 +67,10 @@ impl DirectMxProvider {
             .map_err(|e| EmailError::Provider(format!("DNS resolver init failed: {e}")))?
             .build();
 
-        let mx_lookup = resolver.mx_lookup(domain).await.map_err(|e| {
-            EmailError::Provider(format!("DNS MX lookup failed for {domain}: {e}"))
-        })?;
+        let mx_lookup = resolver
+            .mx_lookup(domain)
+            .await
+            .map_err(|e| EmailError::Provider(format!("DNS MX lookup failed for {domain}: {e}")))?;
 
         let mut mx_records: Vec<(u16, String)> = mx_lookup
             .iter()
