@@ -50,9 +50,6 @@ impl DirectMxProvider {
 
     /// Resolve MX records for a domain, sorted by priority (lowest first).
     async fn resolve_mx(domain: &str) -> Result<Vec<String>, EmailError> {
-        // Use tokio's DNS resolver to get MX records
-        // We shell out to `dig` since tokio doesn't have native MX support
-        // Sanitize domain to prevent command injection
         if domain.is_empty()
             || domain.len() > 253
             || !domain
@@ -64,37 +61,28 @@ impl DirectMxProvider {
             )));
         }
 
-        let output = tokio::process::Command::new("dig")
-            .args(["+short", "MX", domain])
-            .output()
-            .await
-            .map_err(|e| EmailError::Provider(format!("DNS MX lookup failed for {domain}: {e}")))?;
+        use hickory_resolver::TokioResolver;
 
-        if !output.status.success() {
-            return Err(EmailError::Provider(format!(
-                "DNS MX lookup failed for {domain}"
-            )));
-        }
+        let resolver = TokioResolver::builder_tokio()
+            .map_err(|e| EmailError::Provider(format!("DNS resolver init failed: {e}")))?
+            .build();
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let mut mx_records: Vec<(u16, String)> = stdout
-            .lines()
-            .filter_map(|line| {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() == 2 {
-                    let priority = parts[0].parse::<u16>().ok()?;
-                    let host = parts[1].trim_end_matches('.').to_string();
-                    Some((priority, host))
-                } else {
-                    None
-                }
+        let mx_lookup = resolver.mx_lookup(domain).await.map_err(|e| {
+            EmailError::Provider(format!("DNS MX lookup failed for {domain}: {e}"))
+        })?;
+
+        let mut mx_records: Vec<(u16, String)> = mx_lookup
+            .iter()
+            .map(|mx| {
+                let host = mx.exchange().to_string();
+                let host = host.trim_end_matches('.').to_string();
+                (mx.preference(), host)
             })
             .collect();
 
         mx_records.sort_by_key(|(p, _)| *p);
 
         if mx_records.is_empty() {
-            // Fall back to A record (the domain itself)
             Ok(vec![domain.to_string()])
         } else {
             Ok(mx_records.into_iter().map(|(_, h)| h).collect())

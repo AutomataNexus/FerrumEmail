@@ -14,7 +14,7 @@
   <a href="https://crates.io/crates/ferrum-email-core"><img src="https://img.shields.io/crates/v/ferrum-email-core.svg" alt="crates.io"></a>
   <a href="https://docs.rs/ferrum-email-core"><img src="https://docs.rs/ferrum-email-core/badge.svg" alt="docs.rs"></a>
   <a href="https://github.com/AutomataNexus/FerrumEmail/blob/master/LICENSE-MIT"><img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg" alt="License"></a>
-  <img src="https://img.shields.io/badge/rust-2021%20edition-orange.svg" alt="Rust 2021">
+  <img src="https://img.shields.io/badge/rust-2024%20edition-orange.svg" alt="Rust 2024">
 </p>
 
 <p align="center">
@@ -73,6 +73,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 That's it. No boilerplate. No configuration files. No HTML strings.
+
+## Sending Real Emails
+
+`ConsoleProvider` is great for development. For production, use `SmtpProvider` with **any** SMTP server:
+
+```rust
+use ferrum_email_send::{Sender, providers::SmtpProvider};
+
+let provider = SmtpProvider::builder()
+    .host("smtp.gmail.com")        // Gmail, SES, Mailgun, your own Postfix — anything
+    .port(587)
+    .credentials("you@gmail.com", "app-password")
+    .build()?;
+
+let sender = Sender::new(provider, "you@gmail.com");
+sender.send(&my_email, "recipient@example.com").await?;
+```
+
+Or deliver directly via MX (no relay needed):
+
+```rust
+use ferrum_email_send::{Sender, providers::DirectMxProvider};
+
+let provider = DirectMxProvider::new("mail.yourdomain.com");
+let sender = Sender::new(provider, "you@yourdomain.com");
+sender.send(&my_email, "recipient@example.com").await?;
+```
+
+### Providers
+
+| Provider | Use case | Requires |
+|----------|----------|----------|
+| `ConsoleProvider` | Development & testing | Nothing |
+| `SmtpProvider` | Any SMTP server (Gmail, SES, Mailgun, etc.) | Host + credentials |
+| `DirectMxProvider` | Direct MX delivery — no relay needed | Server with outbound port 25 |
 
 ## Why Ferrum Email?
 

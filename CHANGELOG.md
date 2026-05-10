@@ -2,6 +2,19 @@
 
 All notable changes to the Ferrum Email SDK are documented here.
 
+## [0.1.7] - 2026-05-09
+
+### Changed
+- **DirectMxProvider** now uses `hickory-resolver` for async DNS MX lookups instead of shelling out to `dig` — works on Windows, Docker, and systems without `dig` installed
+- Updated README with SmtpProvider examples and provider comparison table
+- Umbrella crate (`ferrum-email`) now uses workspace dependency versions
+
+### Added
+- Inline CID attachments for multipart/related emails (`ferrum-email-send`)
+
+### Fixed
+- Umbrella crate was pinned to stale v0.1.5 sub-crate versions
+
 ## [0.1.5] - 2026-04-06
 
 ### Added
