@@ -233,7 +233,7 @@ impl EmailProvider for SmtpProvider {
         }
 
         // EHLO
-        send_command(&mut writer, "EHLO ferrum-email\r\n").await?;
+        send_command(&mut writer, &format!("EHLO {}\r\n", self.host)).await?;
         let ehlo_resp = read_response(&mut reader).await?;
         if !ehlo_resp.starts_with('2') {
             return Err(EmailError::Provider(format!("EHLO rejected: {ehlo_resp}")));
@@ -265,7 +265,7 @@ impl EmailProvider for SmtpProvider {
         let mut tls_reader = BufReader::new(tls_reader);
 
         // EHLO again after TLS
-        send_command(&mut tls_writer, "EHLO ferrum-email\r\n").await?;
+        send_command(&mut tls_writer, &format!("EHLO {}\r\n", self.host)).await?;
         let _ehlo2 = read_response(&mut tls_reader).await?;
 
         // AUTH
