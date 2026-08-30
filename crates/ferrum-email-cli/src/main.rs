@@ -79,6 +79,7 @@ fn main() {
         "logout" => cmd_logout(),
         "send" => cmd_send(&args),
         "send-branded" => cmd_send_branded(&args),
+        "inbox" => cmd_inbox(&args),
         "preview-branded" => cmd_preview_branded(&args),
         "whoami" => cmd_whoami(),
         "keys" => cmd_keys(),
@@ -320,6 +321,35 @@ fn cmd_send_branded(args: &[String]) {
             eprintln!("Send failed (Ferrum mailbox): {e}");
             std::process::exit(1);
         }
+    }
+}
+
+/// `ferrum inbox [n]` — newest messages in the devops mailbox inbox (Ferrum mailbox API `GET /folders/inbox`).
+fn cmd_inbox(args: &[String]) {
+    let n: usize = args.get(2).and_then(|v| v.parse().ok()).unwrap_or(10);
+    let Some((base, user, pass)) = mailbox_creds() else {
+        eprintln!("No Ferrum mailbox credentials (~/.config/ferrum-mail/mailbox.json or FERRUM_USER/FERRUM_PASS).");
+        std::process::exit(1);
+    };
+    let client = reqwest::blocking::Client::builder().timeout(std::time::Duration::from_secs(20)).build().unwrap();
+    let login: serde_json::Value = match client.post(format!("{base}/auth/login")).json(&serde_json::json!({"username": user, "password": pass})).send().and_then(|r| r.json()) {
+        Ok(v) => v,
+        Err(e) => { eprintln!("mailbox login failed: {e}"); std::process::exit(1); }
+    };
+    let Some(token) = login["token"].as_str() else { eprintln!("mailbox login failed: {login}"); std::process::exit(1); };
+    let msgs: Vec<serde_json::Value> = match client.get(format!("{base}/folders/inbox")).bearer_auth(token).send().and_then(|r| r.error_for_status()).and_then(|r| r.json()) {
+        Ok(v) => v,
+        Err(e) => { eprintln!("inbox fetch failed: {e}"); std::process::exit(1); }
+    };
+    let mut msgs = msgs;
+    msgs.sort_by(|a, b| b["received_at"].as_str().unwrap_or("").cmp(a["received_at"].as_str().unwrap_or("")));
+    if msgs.is_empty() { println!("inbox is empty"); return; }
+    for (i, m) in msgs.iter().take(n).enumerate() {
+        let from = m["from_display"].as_str().filter(|s| !s.is_empty()).or_else(|| m["from"].as_str()).unwrap_or("?");
+        let subject = m["subject"].as_str().unwrap_or("(no subject)");
+        let when = m["received_at"].as_str().map(|s| &s[..s.len().min(16)]).unwrap_or("");
+        let flag = if m["read"].as_bool().unwrap_or(false) { " " } else { "*" };
+        println!("{:>2}{flag} {when}  {from}  —  {subject}", i + 1);
     }
 }
 
