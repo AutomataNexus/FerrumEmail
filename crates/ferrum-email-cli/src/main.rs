@@ -256,7 +256,7 @@ fn cmd_send(args: &[String]) {
         "/emails",
         &token,
         &serde_json::json!({
-            "to": to,
+            "to": [to],
             "subject": subject,
             "html": html,
             "text": body,
@@ -283,7 +283,7 @@ fn cmd_send_branded(args: &[String]) {
     let (to, subject, body) = (&args[2], &args[3], &args[4]);
     let token = require_token();
     let (html, text) = brand::render(subject, body);
-    match api_post("/emails", &token, &serde_json::json!({ "to": to, "subject": subject, "html": html, "text": text })) {
+    match api_post("/emails", &token, &serde_json::json!({ "to": [to], "subject": subject, "html": html, "text": text })) {
         Ok(resp) => {
             let mid = resp["message_id"].as_str().or_else(|| resp["id"].as_str()).unwrap_or("sent");
             println!("Sent branded mail to {to} (ID: {mid})");
