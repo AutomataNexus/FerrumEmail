@@ -307,20 +307,17 @@ fn cmd_send_branded(args: &[String]) {
     }
     let (to, subject, body) = (&args[2], &args[3], &args[4]);
     let (html, text) = brand::render(subject, body);
-    if mailbox_creds().is_some() {
-        match mailbox_send(to, subject, &html, &text) {
-            Ok(id) => { println!("Sent branded mail to {to} via the Ferrum mailbox (ID: {id})"); return; }
-            Err(e) => { eprintln!("mailbox path failed ({e}); falling back to the platform API"); }
-        }
+    // House mail goes through the Ferrum MAILBOX on the AN server (login → /send),
+    // the same path daily-report and maat_daemon use. The ferrum-mail SaaS platform
+    // is a separate product and is never used for house mail — no fallback.
+    if mailbox_creds().is_none() {
+        eprintln!("No Ferrum mailbox credentials (~/.config/ferrum-mail/mailbox.json or FERRUM_USER/FERRUM_PASS).");
+        std::process::exit(1);
     }
-    let token = require_token();
-    match api_post("/emails", &token, &serde_json::json!({ "from": from_addr(), "to": [to], "subject": subject, "html": html, "text": text })) {
-        Ok(resp) => {
-            let mid = resp["message_id"].as_str().or_else(|| resp["id"].as_str()).unwrap_or("sent");
-            println!("Sent branded mail to {to} (ID: {mid})");
-        }
+    match mailbox_send(to, subject, &html, &text) {
+        Ok(id) => println!("Sent branded mail to {to} via the Ferrum mailbox (ID: {id})"),
         Err(e) => {
-            eprintln!("Send failed: {e}");
+            eprintln!("Send failed (Ferrum mailbox): {e}");
             std::process::exit(1);
         }
     }
