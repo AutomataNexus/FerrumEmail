@@ -34,7 +34,7 @@ fn api_get(path: &str, token: &str) -> Result<serde_json::Value, String> {
     let client = reqwest::blocking::Client::new();
     let resp = client
         .get(format!("{API_BASE}{path}"))
-        .header("Authorization", format!("Bearer {token}"))
+        .header("Authorization", auth_value(token))
         .send()
         .map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
@@ -55,7 +55,7 @@ fn api_post(
     let client = reqwest::blocking::Client::new();
     let resp = client
         .post(format!("{API_BASE}{path}"))
-        .header("Authorization", format!("Bearer {token}"))
+        .header("Authorization", auth_value(token))
         .json(body)
         .timeout(std::time::Duration::from_secs(60))
         .send()
@@ -305,4 +305,9 @@ fn cmd_preview_branded(args: &[String]) {
     std::fs::write(out, &html).expect("write html");
     println!("{}", text);
     println!("--- wrote {out} ({} bytes html)", html.len());
+}
+
+// ── an `fm_` API key goes raw; a login session is a JWT and goes as Bearer ──
+fn auth_value(token: &str) -> String {
+    if token.starts_with("fm_") { token.to_string() } else { format!("Bearer {token}") }
 }
