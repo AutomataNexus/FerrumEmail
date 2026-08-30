@@ -12,6 +12,9 @@ name = "ferrum"
 path = "src/main.rs"
 
 [dependencies]
+ferrum-email-core = { path = "../ferrum-email-core" }
+ferrum-email-components = { path = "../ferrum-email-components" }
+ferrum-email-render = { path = "../ferrum-email-render" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "blocking"] }
 serde_json = "1"
 dirs = "6"

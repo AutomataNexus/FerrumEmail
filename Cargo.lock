@@ -654,6 +654,9 @@ name = "ferrum-email-cli"
 version = "0.1.8"
 dependencies = [
  "dirs",
+ "ferrum-email-components",
+ "ferrum-email-core",
+ "ferrum-email-render",
  "reqwest",
  "serde_json",
 ]

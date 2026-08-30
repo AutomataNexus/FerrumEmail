@@ -2,6 +2,8 @@
 //!
 //! Commands: login, inbox, read, send, compose, folders, logout
 
+mod brand;
+
 use std::path::PathBuf;
 
 const API_BASE: &str = "https://ferrum-mail.com/v1";
@@ -76,6 +78,8 @@ fn main() {
         "login" => cmd_login(&args),
         "logout" => cmd_logout(),
         "send" => cmd_send(&args),
+        "send-branded" => cmd_send_branded(&args),
+        "preview-branded" => cmd_preview_branded(&args),
         "whoami" => cmd_whoami(),
         "keys" => cmd_keys(),
         "history" => cmd_history(),
@@ -267,4 +271,38 @@ fn cmd_send(args: &[String]) {
             std::process::exit(1);
         }
     }
+}
+
+// ── branded sends: the AutomataNexus template, rendered by the SDK, posted through the Ferrum Mail API ──
+
+fn cmd_send_branded(args: &[String]) {
+    if args.len() < 5 {
+        eprintln!("Usage: ferrum send-branded <to> <subject> <body>   (plain text body; paragraphs separated by blank lines)");
+        std::process::exit(1);
+    }
+    let (to, subject, body) = (&args[2], &args[3], &args[4]);
+    let token = require_token();
+    let (html, text) = brand::render(subject, body);
+    match api_post("/emails", &token, &serde_json::json!({ "to": to, "subject": subject, "html": html, "text": text })) {
+        Ok(resp) => {
+            let mid = resp["message_id"].as_str().or_else(|| resp["id"].as_str()).unwrap_or("sent");
+            println!("Sent branded mail to {to} (ID: {mid})");
+        }
+        Err(e) => {
+            eprintln!("Send failed: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn cmd_preview_branded(args: &[String]) {
+    if args.len() < 5 {
+        eprintln!("Usage: ferrum preview-branded <out.html> <subject> <body>");
+        std::process::exit(1);
+    }
+    let (out, subject, body) = (&args[2], &args[3], &args[4]);
+    let (html, text) = brand::render(subject, body);
+    std::fs::write(out, &html).expect("write html");
+    println!("{}", text);
+    println!("--- wrote {out} ({} bytes html)", html.len());
 }
