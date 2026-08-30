@@ -256,7 +256,7 @@ fn cmd_send(args: &[String]) {
         "/emails",
         &token,
         &serde_json::json!({
-            "to": [to],
+            "from": from_addr(), "to": [to],
             "subject": subject,
             "html": html,
             "text": body,
@@ -283,7 +283,7 @@ fn cmd_send_branded(args: &[String]) {
     let (to, subject, body) = (&args[2], &args[3], &args[4]);
     let token = require_token();
     let (html, text) = brand::render(subject, body);
-    match api_post("/emails", &token, &serde_json::json!({ "to": [to], "subject": subject, "html": html, "text": text })) {
+    match api_post("/emails", &token, &serde_json::json!({ "from": from_addr(), "to": [to], "subject": subject, "html": html, "text": text })) {
         Ok(resp) => {
             let mid = resp["message_id"].as_str().or_else(|| resp["id"].as_str()).unwrap_or("sent");
             println!("Sent branded mail to {to} (ID: {mid})");
@@ -310,4 +310,9 @@ fn cmd_preview_branded(args: &[String]) {
 // ── an `fm_` API key goes raw; a login session is a JWT and goes as Bearer ──
 fn auth_value(token: &str) -> String {
     if token.starts_with("fm_") { token.to_string() } else { format!("Bearer {token}") }
+}
+
+// ── the house sender; override with FERRUM_FROM ──
+fn from_addr() -> String {
+    std::env::var("FERRUM_FROM").unwrap_or_else(|_| "AutomataNexus <no-reply@automatanexus.com>".to_string())
 }
