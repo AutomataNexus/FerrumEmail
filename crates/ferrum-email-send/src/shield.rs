@@ -65,8 +65,18 @@ pub fn validate_outbound(message: &EmailMessage) -> Result<(), EmailError> {
     // (user-supplied names, subjects), not final rendered HTML which
     // legitimately contains tags like <h1>, <a>, <img>, etc.
 
-    // Validate custom headers
+    // Validate custom headers. Signature headers (DKIM/ARC) are long and folded by construction:
+    // unfold them and apply a signature-sized sanity check instead of the 100-char line rule.
     for (name, value) in &message.headers {
+        let lname = name.to_ascii_lowercase();
+        let signature = matches!(lname.as_str(), "dkim-signature" | "arc-seal" | "arc-message-signature" | "arc-authentication-results" | "authentication-results");
+        if signature {
+            let unfolded = value.replace("\r\n", "").replace('\n', "").replace('\r', "");
+            if unfolded.contains('\0') || unfolded.len() > 4096 {
+                return Err(EmailError::Provider(format!("Shield: header '{name}' rejected: malformed signature header")));
+            }
+            continue;
+        }
         shield
             .validate_email_header(name, value)
             .map_err(|e| EmailError::Provider(format!("Shield: header '{name}' rejected: {e}")))?;

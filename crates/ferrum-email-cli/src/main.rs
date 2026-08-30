@@ -275,14 +275,45 @@ fn cmd_send(args: &[String]) {
 
 // ── branded sends: the AutomataNexus template, rendered by the SDK, posted through the Ferrum Mail API ──
 
+// ── the house delivery path: the Ferrum MAILBOX API on the AN server (what daily-report and maat_daemon use):
+// ── login as the devops mailbox user, then POST /send. Credentials: ~/.config/ferrum-mail/mailbox.json or FERRUM_USER/FERRUM_PASS.
+fn mailbox_creds() -> Option<(String, String, String)> {
+    let base_default = "https://ferrum-mail.com/mailbox/api/v1".to_string();
+    if let (Ok(u), Ok(p)) = (std::env::var("FERRUM_USER"), std::env::var("FERRUM_PASS")) {
+        return Some((std::env::var("FERRUM_BASE").unwrap_or(base_default), u, p));
+    }
+    let path = dirs::config_dir()?.join("ferrum-mail").join("mailbox.json");
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()?;
+    let mut base = v["base"].as_str().unwrap_or(&base_default).trim_end_matches('/').to_string();
+    if !base.contains("/mailbox/api/") { base = format!("{base}/mailbox/api/v1"); }
+    Some((base, v["username"].as_str()?.to_string(), v["password"].as_str()?.to_string()))
+}
+
+fn mailbox_send(to: &str, subject: &str, html: &str, text: &str) -> Result<String, String> {
+    let (base, user, pass) = mailbox_creds().ok_or("no mailbox credentials")?;
+    let client = reqwest::blocking::Client::builder().timeout(std::time::Duration::from_secs(60)).build().map_err(|e| e.to_string())?;
+    let login: serde_json::Value = client.post(format!("{base}/auth/login")).json(&serde_json::json!({"username": user, "password": pass})).send().map_err(|e| e.to_string())?.json().map_err(|e| e.to_string())?;
+    let token = login["token"].as_str().ok_or_else(|| format!("mailbox login failed: {login}"))?.to_string();
+    let r = client.post(format!("{base}/send")).bearer_auth(&token).json(&serde_json::json!({"to": [to], "subject": subject, "html": html, "text": text, "attachments": [], "track_opens": false})).send().map_err(|e| e.to_string())?;
+    let status = r.status();
+    let body = r.text().unwrap_or_default();
+    if status.is_success() { let v: serde_json::Value = serde_json::from_str(&body).unwrap_or_default(); Ok(v["message_id"].as_str().or_else(|| v["id"].as_str()).unwrap_or("sent").to_string()) } else { Err(format!("mailbox send HTTP {status}: {body}")) }
+}
+
 fn cmd_send_branded(args: &[String]) {
     if args.len() < 5 {
         eprintln!("Usage: ferrum send-branded <to> <subject> <body>   (plain text body; paragraphs separated by blank lines)");
         std::process::exit(1);
     }
     let (to, subject, body) = (&args[2], &args[3], &args[4]);
-    let token = require_token();
     let (html, text) = brand::render(subject, body);
+    if mailbox_creds().is_some() {
+        match mailbox_send(to, subject, &html, &text) {
+            Ok(id) => { println!("Sent branded mail to {to} via the Ferrum mailbox (ID: {id})"); return; }
+            Err(e) => { eprintln!("mailbox path failed ({e}); falling back to the platform API"); }
+        }
+    }
+    let token = require_token();
     match api_post("/emails", &token, &serde_json::json!({ "from": from_addr(), "to": [to], "subject": subject, "html": html, "text": text })) {
         Ok(resp) => {
             let mid = resp["message_id"].as_str().or_else(|| resp["id"].as_str()).unwrap_or("sent");
