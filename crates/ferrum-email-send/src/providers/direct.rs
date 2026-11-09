@@ -65,7 +65,8 @@ impl DirectMxProvider {
 
         let resolver = TokioResolver::builder_tokio()
             .map_err(|e| EmailError::Provider(format!("DNS resolver init failed: {e}")))?
-            .build();
+            .build()
+            .map_err(|e| EmailError::Provider(format!("DNS resolver init failed: {e}")))?;
 
         let mx_lookup = resolver
             .mx_lookup(domain)
@@ -73,11 +74,15 @@ impl DirectMxProvider {
             .map_err(|e| EmailError::Provider(format!("DNS MX lookup failed for {domain}: {e}")))?;
 
         let mut mx_records: Vec<(u16, String)> = mx_lookup
+            .answers()
             .iter()
-            .map(|mx| {
-                let host = mx.exchange().to_string();
-                let host = host.trim_end_matches('.').to_string();
-                (mx.preference(), host)
+            .filter_map(|r| match &r.data {
+                hickory_resolver::proto::rr::RData::MX(mx) => {
+                    let host = mx.exchange.to_string();
+                    let host = host.trim_end_matches('.').to_string();
+                    Some((mx.preference, host))
+                }
+                _ => None,
             })
             .collect();
 

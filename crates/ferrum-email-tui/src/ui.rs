@@ -376,7 +376,7 @@ fn draw_compose(f: &mut Frame, app: &App, area: Rect) {
         .border_style(field_style(ComposeField::To))
         .style(Style::default().bg(theme::CARD_BG));
     let to_text = Paragraph::new(Line::from(Span::styled(
-        format!(" {}", &app.compose_to),
+        format!(" {}", app.compose_to),
         theme::text_normal(),
     )))
     .block(to_block);
@@ -396,7 +396,7 @@ fn draw_compose(f: &mut Frame, app: &App, area: Rect) {
         .border_style(field_style(ComposeField::Subject))
         .style(Style::default().bg(theme::CARD_BG));
     let subj_text = Paragraph::new(Line::from(Span::styled(
-        format!(" {}", &app.compose_subject),
+        format!(" {}", app.compose_subject),
         theme::text_normal(),
     )))
     .block(subj_block);

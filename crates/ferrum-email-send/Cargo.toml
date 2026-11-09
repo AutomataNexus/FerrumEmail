@@ -25,7 +25,7 @@ rustls = { version = "0.23", default-features = false, features = ["std", "tls12
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"], optional = true }
 webpki-roots = { version = "0.26", optional = true }
 base64 = { version = "0.22", optional = true }
-hickory-resolver = { version = "0.25", default-features = false, features = ["tokio", "system-config"], optional = true }
+hickory-resolver = { version = "0.26", default-features = false, features = ["tokio", "system-config"], optional = true }
 
 aegis-db-vault = { version = "0.2.3", optional = true }
 nexus-shield = { version = "0.3", optional = true }

@@ -71,7 +71,7 @@ pub fn validate_outbound(message: &EmailMessage) -> Result<(), EmailError> {
         let lname = name.to_ascii_lowercase();
         let signature = matches!(lname.as_str(), "dkim-signature" | "arc-seal" | "arc-message-signature" | "arc-authentication-results" | "authentication-results");
         if signature {
-            let unfolded = value.replace("\r\n", "").replace('\n', "").replace('\r', "");
+            let unfolded = value.replace("\r\n", "").replace(['\n', '\r'], "");
             if unfolded.contains('\0') || unfolded.len() > 4096 {
                 return Err(EmailError::Provider(format!("Shield: header '{name}' rejected: malformed signature header")));
             }
